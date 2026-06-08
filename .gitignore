@@ -1,0 +1,41 @@
+# Local Oracle/APEX/ORDS runtime artifacts
+apex_24_1/
+apex_24.1_en.zip
+ords_config/
+ords_direct_config/
+ords_logs/
+ords_scripts/
+ords_scripts_rel/
+*.log
+
+# Local-only test/import/debug scripts
+LOCAL_TEST_*.sql
+check_*.sql
+diagnose_*.sql
+fix_*.sql
+grant_*.sql
+import_*.sql
+install_*.sql
+local_probe.sql
+prepare_*.sql
+probe_*.sql
+register_*.sql
+replace_app.sql
+reset_*.sql
+revert_*.sql
+setup_migration_local.sql
+set_local_*.sql
+start_ords*.bat
+switch_to_apex_auth.sql
+test_login.sql
+verify_apex_xepdb1.sql
+
+# Tool/private folders
+.claude/
+.agents/
+.codex/
+
+# Secrets
+*.env
+*password*
+*secret*

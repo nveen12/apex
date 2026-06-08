@@ -1,0 +1,572 @@
+set echo on
+set define off
+whenever sqlerror exit sql.sqlcode rollback
+
+-- =============================================================================
+-- Migration Tracker - Page 9: FV Detail / Live Vergleich
+-- Anwendung: 114  Workspace: MIGRATION  Schema: migration
+-- Zielserver: rzhs440.ofd-h.de  (nicht verbinden; nur lokal ausfuehren)
+--
+-- Abhaengig von:
+--   02_migration_tracker_ddl.sql  (Basistabellen)
+--   05_schema_object_tracking.sql (mt_server.dblink_name)
+--
+-- TODO DBA: DB Links (RZHS184_LINK usw.) muessen auf rzhs440 vorhanden
+-- sein, bevor die fuenf Vergleichs-Regionen Daten liefern koennen.
+-- Solange Source- oder Target-DB-Link fehlt/nicht erreichbar ist, bleiben die
+-- Regionen verborgen (Condition: P9_COMPARE_OK IS NOT NULL).
+-- =============================================================================
+
+declare
+    l_workspace_id number;
+begin
+    select workspace_id
+    into   l_workspace_id
+    from   apex_workspaces
+    where  workspace = 'MIGRATION';
+
+    apex_util.set_security_group_id(l_workspace_id);
+
+    wwv_flow_imp.import_begin(
+        p_version_yyyy_mm_dd     => '2024.05.31',
+        p_release                => '24.1.0',
+        p_default_workspace_id   => l_workspace_id,
+        p_default_application_id => 114,
+        p_default_id_offset      => 0,
+        p_default_owner          => 'MIGRATION');
+
+    -- Seite sauber neu erstellen (idempotent)
+    wwv_flow_imp_page.remove_page(p_flow_id => 114, p_page_id => 9);
+
+    -- -------------------------------------------------------------------------
+    -- Seite
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_page(
+        p_id                    => 9,
+        p_name                  => 'FV Detail / Live Vergleich',
+        p_alias                 => 'FV-DETAIL-LIVE-VERGLEICH',
+        p_step_title            => 'FV Detail / Live Vergleich',
+        p_autocomplete_on_off   => 'OFF',
+        p_page_template_options => '#DEFAULT#',
+        p_protection_level      => 'C',
+        p_page_component_map    => '03');
+
+    -- -------------------------------------------------------------------------
+    -- Schaltflaechen-Region (Dialog Footer)
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(90000000000000090),
+        p_plug_name               => 'Schaltflaechen',
+        p_region_template_options => '#DEFAULT#',
+        p_plug_template           => wwv_flow_imp.id(10774978406759760),
+        p_plug_display_sequence   => 5,
+        p_plug_display_point      => 'REGION_POSITION_03',
+        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'TEXT',
+            'show_line_breaks', 'Y')).to_clob);
+
+    -- Abbrechen-Schaltflaeche
+    wwv_flow_imp_page.create_page_button(
+        p_id                      => wwv_flow_imp.id(90000000000000091),
+        p_button_sequence         => 10,
+        p_button_plug_id          => wwv_flow_imp.id(90000000000000090),
+        p_button_name             => 'CANCEL',
+        p_button_action           => 'DEFINED_BY_DA',
+        p_button_template_options => '#DEFAULT#',
+        p_button_template_id      => wwv_flow_imp.id(10892289891759782),
+        p_button_image_alt        => 'Abbrechen',
+        p_button_position         => 'CLOSE',
+        p_button_alignment        => 'RIGHT');
+
+    -- Dynamic Action: Dialog schliessen
+    wwv_flow_imp_page.create_page_da_event(
+        p_id                      => wwv_flow_imp.id(90000000000000092),
+        p_name                    => 'Dialog schliessen',
+        p_event_sequence          => 10,
+        p_triggering_element_type => 'BUTTON',
+        p_triggering_button_id    => wwv_flow_imp.id(90000000000000091),
+        p_bind_type               => 'bind',
+        p_execution_type          => 'IMMEDIATE',
+        p_bind_event_type         => 'click');
+
+    wwv_flow_imp_page.create_page_da_action(
+        p_id                   => wwv_flow_imp.id(90000000000000093),
+        p_event_id             => wwv_flow_imp.id(90000000000000092),
+        p_event_result         => 'TRUE',
+        p_action_sequence      => 10,
+        p_execute_on_page_init => 'N',
+        p_action               => 'NATIVE_DIALOG_CANCEL');
+
+    -- -------------------------------------------------------------------------
+    -- Verborgene Seitenelemente
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000002),
+        p_name             => 'P9_MAPPING_ID',
+        p_item_sequence    => 5,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000012),
+        p_name             => 'P9_FV_ID',
+        p_item_sequence    => 10,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000003),
+        p_name             => 'P9_SCHEMA_NAME',
+        p_item_sequence    => 20,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000004),
+        p_name             => 'P9_SRC_DBLINK_NAME',
+        p_item_sequence    => 30,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000005),
+        p_name             => 'P9_TGT_DBLINK_NAME',
+        p_item_sequence    => 35,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000008),
+        p_name             => 'P9_COMPARE_OK',
+        p_item_sequence    => 38,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000013),
+        p_name             => 'P9_MIGRATION_DATE',
+        p_item_sequence    => 40,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000014),
+        p_name             => 'P9_STATUS_TEXT',
+        p_item_sequence    => 45,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(90000000000000015),
+        p_plug_name               => 'Live Vergleich Status',
+        p_title                   => 'Live Vergleich Status',
+        p_plug_template           => wwv_flow_imp.id(10818657374759767),
+        p_region_template_options => '#DEFAULT#',
+        p_plug_display_sequence   => 8,
+        p_plug_display_point      => 'BODY',
+        p_plug_source             => '<strong>Status:</strong> &P9_STATUS_TEXT.',
+        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'HTML',
+            'show_line_breaks', 'N')).to_clob);
+
+    -- -------------------------------------------------------------------------
+    -- Before Header 1: Source/Target DB Links aus gewaehltem Mapping ableiten
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_page_process(
+        p_id                     => wwv_flow_imp.id(90000000000000006),
+        p_process_sequence       => 10,
+        p_process_point          => 'BEFORE_HEADER',
+        p_process_type           => 'NATIVE_PLSQL',
+        p_process_name           => 'Source und Target DB Links ableiten',
+        p_process_sql_clob       => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'begin',
+            '    :P9_SRC_DBLINK_NAME := null;',
+            '    :P9_TGT_DBLINK_NAME := null;',
+            '    :P9_STATUS_TEXT := null;',
+            '',
+            '    select src_dblink_name, tgt_dblink_name',
+            '    into   :P9_SRC_DBLINK_NAME, :P9_TGT_DBLINK_NAME',
+            '    from (',
+            '        select sp.dblink_name as src_dblink_name,',
+            '               tp.dblink_name as tgt_dblink_name,',
+            '               row_number() over (order by case',
+            '                   when nvl(sp.tier, ''-'') = nvl(tp.tier, ''-'') then 0',
+            '                   else 1',
+            '               end, sp.pdb_id) rn',
+            '        from   mt_fv_pdb_mapping tm',
+            '        join   mt_pdb tp on tp.pdb_id = tm.pdb_id',
+            '        join   mt_fv_pdb_mapping sm on sm.fv_id = tm.fv_id',
+            '        join   mt_pdb sp on sp.pdb_id = sm.pdb_id',
+            '        where  tm.mapping_id = :P9_MAPPING_ID',
+            '        and    tm.mapping_role = ''WORKBENCH''',
+            '        and    sm.mapping_role = ''QUELLE''',
+            '        and    nvl(tm.aktiv, ''J'') = ''J''',
+            '        and    nvl(sm.aktiv, ''J'') = ''J''',
+            '    )',
+            '    where rn = 1;',
+            '',
+            '    :P9_STATUS_TEXT := ''Quelle: '' || nvl(:P9_SRC_DBLINK_NAME, ''kein SRC-Link'')',
+            '        || '' / Ziel: '' || nvl(:P9_TGT_DBLINK_NAME, ''kein TGT-Link'');',
+            'exception',
+            '    when no_data_found then',
+            '        :P9_SRC_DBLINK_NAME := null;',
+            '        :P9_TGT_DBLINK_NAME := null;',
+            '        :P9_STATUS_TEXT := ''Kein Source/Target-Mapping fuer diese Auswahl gefunden.'';',
+            'end;')),
+        p_error_display_location => 'INLINE_IN_NOTIFICATION',
+        p_internal_uid           => 90000000000000006);
+
+    -- -------------------------------------------------------------------------
+    -- Before Header 2: Migrationsdatum aus mt_migration_checklist ableiten
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_page_process(
+        p_id                     => wwv_flow_imp.id(90000000000000007),
+        p_process_sequence       => 20,
+        p_process_point          => 'BEFORE_HEADER',
+        p_process_type           => 'NATIVE_PLSQL',
+        p_process_name           => 'Migrationsdatum ableiten',
+        p_process_sql_clob       => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'begin',
+            '    -- Letztes Go-Live-Datum als Referenz; Fallback: SYSDATE - 90',
+            '    select to_char(nvl(max(golive_datum), sysdate - 90), ''YYYY-MM-DD'')',
+            '    into   :P9_MIGRATION_DATE',
+            '    from   mt_migration_checklist',
+            '    where  fv_id = :P9_FV_ID;',
+            'exception',
+            '    when no_data_found then',
+            '        :P9_MIGRATION_DATE := to_char(sysdate - 90, ''YYYY-MM-DD'');',
+            'end;')),
+        p_error_display_location => 'INLINE_IN_NOTIFICATION',
+        p_internal_uid           => 90000000000000007);
+
+    -- -------------------------------------------------------------------------
+    -- Before Header 3: Source/Target DB Links testen
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_page_process(
+        p_id                     => wwv_flow_imp.id(90000000000000009),
+        p_process_sequence       => 30,
+        p_process_point          => 'BEFORE_HEADER',
+        p_process_type           => 'NATIVE_PLSQL',
+        p_process_name           => 'Source und Target DB Links testen',
+        p_process_sql_clob       => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'declare',
+            '    l_dummy number;',
+            'begin',
+            '    :P9_COMPARE_OK := null;',
+            '    if :P9_SRC_DBLINK_NAME is null or :P9_TGT_DBLINK_NAME is null then',
+            '        :P9_STATUS_TEXT := nvl(:P9_STATUS_TEXT, ''DB-Link fehlt.'') || '' Vergleich nicht moeglich.'';',
+            '    elsif :P9_SRC_DBLINK_NAME like ''##%##'' or :P9_TGT_DBLINK_NAME like ''##%##'' then',
+            '        :P9_STATUS_TEXT := :P9_STATUS_TEXT || '' / TODO: Platzhalter-DB-Link ersetzen.'';',
+            '    else',
+            '        execute immediate',
+            '            ''select 1 from dual@'' || dbms_assert.simple_sql_name(:P9_SRC_DBLINK_NAME)',
+            '            into l_dummy;',
+            '        execute immediate',
+            '            ''select 1 from dual@'' || dbms_assert.simple_sql_name(:P9_TGT_DBLINK_NAME)',
+            '            into l_dummy;',
+            '        :P9_COMPARE_OK := ''J'';',
+            '        :P9_STATUS_TEXT := :P9_STATUS_TEXT || '' / DB-Links erreichbar. Vergleich wird ausgefuehrt.'';',
+            '    end if;',
+            'exception',
+            '    when others then',
+            '        :P9_COMPARE_OK := null;',
+            '        :P9_STATUS_TEXT := nvl(:P9_STATUS_TEXT, ''DB-Link-Test'') || '' / Fehler: '' || sqlerrm;',
+            'end;')),
+        p_error_display_location => 'INLINE_IN_NOTIFICATION',
+        p_internal_uid           => 90000000000000009);
+
+    -- =========================================================================
+    -- Vergleichs-Regionen A-E
+    -- Alle Regionen: Condition = P9_COMPARE_OK IS NOT NULL
+    -- =========================================================================
+
+    -- -------------------------------------------------------------------------
+    -- Region A: Objektanzahl nach Typ — Quelle vs. Ziel
+    -- Quelle: all_objects@<source dblink> / Ziel: all_objects@<target dblink>
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_report_region(
+        p_id                         => wwv_flow_imp.id(90000000000000010),
+        p_name                       => 'Objektanzahl nach Typ: Quelle vs. Ziel',
+        p_title                      => 'Objektanzahl nach Typ: Quelle vs. Ziel',
+        p_template                   => wwv_flow_imp.id(10818657374759767),
+        p_display_sequence           => 10,
+        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
+        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
+        p_source_type                => 'NATIVE_SQL_REPORT',
+        p_query_type                 => 'SQL',
+        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'select coalesce(src.object_type, tgt.object_type) as "Typ",',
+            '       nvl(src.object_count, 0)                   as "Quelle",',
+            '       nvl(tgt.object_count, 0)                   as "Ziel",',
+            '       case',
+            '           when nvl(src.object_count, 0) = nvl(tgt.object_count, 0) then ''OK''',
+            '           else ''DIFF''',
+            '       end                                        as "Diff"',
+            'from (',
+            '    select object_type, count(*) object_count',
+            '    from   all_objects@&P9_SRC_DBLINK_NAME.',
+            '    where  owner = upper(:P9_SCHEMA_NAME)',
+            '    and    object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',',
+            '                           ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',',
+            '                           ''INDEX'',''SYNONYM'',''TYPE'',''TYPE BODY'')',
+            '    and    object_name not like ''BIN$%''',
+            '    group  by object_type',
+            ') src',
+            'full outer join (',
+            '    select object_type, count(*) object_count',
+            '    from   all_objects@&P9_TGT_DBLINK_NAME.',
+            '    where  owner = upper(:P9_SCHEMA_NAME)',
+            '    and    object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',',
+            '                           ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',',
+            '                           ''INDEX'',''SYNONYM'',''TYPE'',''TYPE BODY'')',
+            '    and    object_name not like ''BIN$%''',
+            '    group  by object_type',
+            ') tgt on tgt.object_type = src.object_type',
+            'order by 1')),
+        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_ajax_enabled                => 'Y',
+        p_lazy_loading                => false,
+        p_query_row_template          => wwv_flow_imp.id(10845430908759771),
+        p_query_num_rows              => 20,
+        p_query_options               => 'DERIVED_REPORT_COLUMNS',
+        p_query_num_rows_type         => 'NEXT_PREVIOUS_LINKS',
+        p_pagination_display_position => 'BOTTOM_RIGHT',
+        p_csv_output                  => 'N',
+        p_prn_output                  => 'N',
+        p_sort_null                   => 'L',
+        p_plug_query_strip_html       => 'N');
+
+    -- -------------------------------------------------------------------------
+    -- Region B: Ungueltige Objekte — Quelle und Ziel
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_report_region(
+        p_id                         => wwv_flow_imp.id(90000000000000020),
+        p_name                       => unistr('Ung\00FCltige Objekte'),
+        p_title                      => unistr('Ung\00FCltige Objekte'),
+        p_template                   => wwv_flow_imp.id(10818657374759767),
+        p_display_sequence           => 20,
+        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
+        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
+        p_source_type                => 'NATIVE_SQL_REPORT',
+        p_query_type                 => 'SQL',
+        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'select ''QUELLE''      as "Seite",',
+            '       object_name    as "Objekt",',
+            '       object_type    as "Typ",',
+            '       status         as "Status",',
+            '       to_char(last_ddl_time, ''DD.MM.YYYY HH24:MI'') as "Letzte Aenderung"',
+            'from   all_objects@&P9_SRC_DBLINK_NAME.',
+            'where  owner = upper(:P9_SCHEMA_NAME)',
+            'and    status <> ''VALID''',
+            'and    object_name not like ''BIN$%''',
+            'union all',
+            'select ''ZIEL'',',
+            '       object_name,',
+            '       object_type,',
+            '       status,',
+            '       to_char(last_ddl_time, ''DD.MM.YYYY HH24:MI'')',
+            'from   all_objects@&P9_TGT_DBLINK_NAME.',
+            'where  owner = upper(:P9_SCHEMA_NAME)',
+            'and    status <> ''VALID''',
+            'and    object_name not like ''BIN$%''',
+            'order by 1, 3, 2')),
+        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_ajax_enabled                => 'Y',
+        p_lazy_loading                => false,
+        p_query_row_template          => wwv_flow_imp.id(10845430908759771),
+        p_query_num_rows              => 20,
+        p_query_options               => 'DERIVED_REPORT_COLUMNS',
+        p_query_num_rows_type         => 'NEXT_PREVIOUS_LINKS',
+        p_pagination_display_position => 'BOTTOM_RIGHT',
+        p_csv_output                  => 'N',
+        p_prn_output                  => 'N',
+        p_sort_null                   => 'L',
+        p_plug_query_strip_html       => 'N');
+
+    -- -------------------------------------------------------------------------
+    -- Region C: Forward Changes auf Quelle nach Migrationsdatum
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_report_region(
+        p_id                         => wwv_flow_imp.id(90000000000000030),
+        p_name                       => 'Forward Changes auf Quelle',
+        p_title                      => 'Forward Changes auf Quelle',
+        p_template                   => wwv_flow_imp.id(10818657374759767),
+        p_display_sequence           => 30,
+        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
+        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
+        p_source_type                => 'NATIVE_SQL_REPORT',
+        p_query_type                 => 'SQL',
+        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'select object_name  as "Objekt",',
+            '       object_type  as "Typ",',
+            '       status       as "Status",',
+            '       to_char(last_ddl_time, ''DD.MM.YYYY HH24:MI'') as "Geaendert am"',
+            'from   all_objects@&P9_SRC_DBLINK_NAME.',
+            'where  owner = upper(:P9_SCHEMA_NAME)',
+            'and    last_ddl_time > to_date(:P9_MIGRATION_DATE, ''YYYY-MM-DD'')',
+            'and    object_name not like ''BIN$%''',
+            'order by last_ddl_time desc, object_type, object_name')),
+        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_ajax_enabled                => 'Y',
+        p_lazy_loading                => false,
+        p_query_row_template          => wwv_flow_imp.id(10845430908759771),
+        p_query_num_rows              => 20,
+        p_query_options               => 'DERIVED_REPORT_COLUMNS',
+        p_query_num_rows_type         => 'NEXT_PREVIOUS_LINKS',
+        p_pagination_display_position => 'BOTTOM_RIGHT',
+        p_csv_output                  => 'N',
+        p_prn_output                  => 'N',
+        p_sort_null                   => 'L',
+        p_plug_query_strip_html       => 'N');
+
+    -- -------------------------------------------------------------------------
+    -- Region D: Tablespace-Vergleich
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_report_region(
+        p_id                         => wwv_flow_imp.id(90000000000000040),
+        p_name                       => 'Tablespace-Vergleich',
+        p_title                      => 'Tablespace-Vergleich',
+        p_template                   => wwv_flow_imp.id(10818657374759767),
+        p_display_sequence           => 40,
+        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
+        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
+        p_source_type                => 'NATIVE_SQL_REPORT',
+        p_query_type                 => 'SQL',
+        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'select coalesce(src.tablespace_name, tgt.tablespace_name) as "Tablespace",',
+            '       nvl(src.table_count, 0)                            as "Tabellen Quelle",',
+            '       nvl(tgt.table_count, 0)                            as "Tabellen Ziel",',
+            '       case',
+            '           when src.tablespace_name is null              then ''NUR_ZIEL''',
+            '           when tgt.tablespace_name is null              then ''NUR_QUELLE''',
+            '           when src.table_count = tgt.table_count        then ''OK''',
+            '           else ''DIFF''',
+            '       end                                               as "Status"',
+            'from (',
+            '    select nvl(tablespace_name, ''<NULL>'') tablespace_name,',
+            '           count(*) table_count',
+            '    from   all_tables@&P9_SRC_DBLINK_NAME.',
+            '    where  owner = upper(:P9_SCHEMA_NAME)',
+            '    group  by nvl(tablespace_name, ''<NULL>'')',
+            ') src',
+            'full outer join (',
+            '    select nvl(tablespace_name, ''<NULL>'') tablespace_name,',
+            '           count(*) table_count',
+            '    from   all_tables@&P9_TGT_DBLINK_NAME.',
+            '    where  owner = upper(:P9_SCHEMA_NAME)',
+            '    group  by nvl(tablespace_name, ''<NULL>'')',
+            ') tgt on tgt.tablespace_name = src.tablespace_name',
+            'order by 1')),
+        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_ajax_enabled                => 'Y',
+        p_lazy_loading                => false,
+        p_query_row_template          => wwv_flow_imp.id(10845430908759771),
+        p_query_num_rows              => 20,
+        p_query_options               => 'DERIVED_REPORT_COLUMNS',
+        p_query_num_rows_type         => 'NEXT_PREVIOUS_LINKS',
+        p_pagination_display_position => 'BOTTOM_RIGHT',
+        p_csv_output                  => 'N',
+        p_prn_output                  => 'N',
+        p_sort_null                   => 'L',
+        p_plug_query_strip_html       => 'N');
+
+    -- -------------------------------------------------------------------------
+    -- Region E: APEX-Anwendungen Vergleich
+    --
+    -- TODO DBA/APEX: Bestaetigen ob workspace_name = schema_name gilt fuer
+    -- jedes Fachverfahren. Falls nicht: eigenes Bind-Item / Tabellenspalte
+    -- hinzufuegen.
+    -- -------------------------------------------------------------------------
+    wwv_flow_imp_page.create_report_region(
+        p_id                         => wwv_flow_imp.id(90000000000000050),
+        p_name                       => 'APEX-Anwendungen Vergleich',
+        p_title                      => 'APEX-Anwendungen Vergleich',
+        p_template                   => wwv_flow_imp.id(10818657374759767),
+        p_display_sequence           => 50,
+        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
+        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
+        p_source_type                => 'NATIVE_SQL_REPORT',
+        p_query_type                 => 'SQL',
+        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'select coalesce(src.application_id,   tgt.application_id)   as "App-ID",',
+            '       coalesce(src.application_name, tgt.application_name) as "Name",',
+            '       src.workspace   as "Workspace Quelle",',
+            '       tgt.workspace   as "Workspace Ziel",',
+            '       src.page_count  as "Seiten Quelle",',
+            '       tgt.page_count  as "Seiten Ziel",',
+            '       to_char(src.last_updated_on, ''DD.MM.YYYY'') as "Stand Quelle",',
+            '       to_char(tgt.last_updated_on, ''DD.MM.YYYY'') as "Stand Ziel",',
+            '       case',
+            '           when src.application_id is null                           then ''NUR_ZIEL''',
+            '           when tgt.application_id is null                           then ''NUR_QUELLE''',
+            '           when nvl(src.page_count, -1) = nvl(tgt.page_count, -1)   then ''OK''',
+            '           else ''DIFF''',
+            '       end                                                           as "Status"',
+            'from (',
+            '    select a.application_id,',
+            '           a.application_name,',
+            '           a.workspace,',
+            '           (select count(*)',
+            '            from   apex_application_pages@&P9_SRC_DBLINK_NAME. p',
+            '            where  p.application_id = a.application_id) as page_count,',
+            '           a.last_updated_on',
+            '    from   apex_applications@&P9_SRC_DBLINK_NAME. a',
+            '    where  upper(a.workspace) = upper(:P9_SCHEMA_NAME)',
+            ') src',
+            'full outer join (',
+            '    select a.application_id,',
+            '           a.application_name,',
+            '           a.workspace,',
+            '           (select count(*)',
+            '            from   apex_application_pages@&P9_TGT_DBLINK_NAME. p',
+            '            where  p.application_id = a.application_id) as page_count,',
+            '           a.last_updated_on',
+            '    from   apex_applications@&P9_TGT_DBLINK_NAME. a',
+            '    where  upper(a.workspace) = upper(:P9_SCHEMA_NAME)',
+            ') tgt on tgt.application_id = src.application_id',
+            'order by 1')),
+        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_ajax_enabled                => 'Y',
+        p_lazy_loading                => false,
+        p_query_row_template          => wwv_flow_imp.id(10845430908759771),
+        p_query_num_rows              => 20,
+        p_query_options               => 'DERIVED_REPORT_COLUMNS',
+        p_query_num_rows_type         => 'NEXT_PREVIOUS_LINKS',
+        p_pagination_display_position => 'BOTTOM_RIGHT',
+        p_csv_output                  => 'N',
+        p_prn_output                  => 'N',
+        p_sort_null                   => 'L',
+        p_plug_query_strip_html       => 'N');
+
+    wwv_flow_imp.import_end(p_auto_install_sup_obj => false);
+    commit;
+end;
+/
+
+-- Verifikation
+select item_name, display_sequence
+from   apex_application_page_items
+where  application_id = 114
+and    page_id        = 9
+order  by display_sequence;
+
+select region_name, display_sequence, condition_type
+from   apex_application_page_regions
+where  application_id = 114
+and    page_id        = 9
+order  by display_sequence;
