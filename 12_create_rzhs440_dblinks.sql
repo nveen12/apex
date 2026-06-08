@@ -34,12 +34,25 @@ declare
         select count(*)
         into   l_count
         from   user_db_links
-        where  db_link = upper(p_name);
+        where  db_link = upper(p_name)
+        or     db_link like upper(p_name) || '.%';
 
         if l_count > 0 and l_recreate = 'Y' then
-            execute immediate 'drop database link ' || dbms_assert.simple_sql_name(p_name);
-            l_count := 0;
-            dbms_output.put_line('DROPPED ' || p_name);
+            for r in (
+                select db_link
+                from   user_db_links
+                where  db_link = upper(p_name)
+                or     db_link like upper(p_name) || '.%'
+            ) loop
+                execute immediate 'drop database link ' || dbms_assert.qualified_sql_name(r.db_link);
+                dbms_output.put_line('DROPPED ' || r.db_link);
+            end loop;
+
+            select count(*)
+            into   l_count
+            from   user_db_links
+            where  db_link = upper(p_name)
+            or     db_link like upper(p_name) || '.%';
         end if;
 
         if l_count = 0 then
@@ -52,8 +65,19 @@ declare
             execute immediate l_sql;
             dbms_output.put_line('CREATED ' || p_name);
         else
-            dbms_output.put_line('EXISTS  ' || p_name);
+            dbms_output.put_line('EXISTS  ' || p_name || ' (not recreated)');
         end if;
+    exception
+        when others then
+            if sqlcode = -2011 then
+                raise_application_error(
+                    -20012,
+                    'Duplicate DB link while creating ' || p_name ||
+                    '. Check USER_DB_LINKS/DBA_DB_LINKS for private or public links with this name. Original error: ' ||
+                    sqlerrm);
+            else
+                raise;
+            end if;
     end;
 begin
     ensure_link('rzhs184_seminar_int',          'rzhs184', 'seminar.int');
