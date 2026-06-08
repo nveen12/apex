@@ -177,6 +177,14 @@ begin
         p_protection_level => 'S',
         p_attribute_01     => 'Y');
 
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(90000000000000016),
+        p_name             => 'P9_CLASSIC_REPORTS_DISABLED',
+        p_item_sequence    => 50,
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
     wwv_flow_imp_page.create_page_plug(
         p_id                      => wwv_flow_imp.id(90000000000000015),
         p_plug_name               => 'Live Vergleich Status',
@@ -190,6 +198,198 @@ begin
             'expand_shortcuts', 'N',
             'output_as',        'HTML',
             'show_line_breaks', 'N')).to_clob);
+
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(90000000000000017),
+        p_plug_name               => 'Live Vergleich Ergebnisse',
+        p_title                   => 'Live Vergleich Ergebnisse',
+        p_plug_template           => wwv_flow_imp.id(10818657374759767),
+        p_region_template_options => '#DEFAULT#:t-Region--scrollBody',
+        p_plug_display_sequence   => 9,
+        p_plug_display_point      => 'BODY',
+        p_plug_source_type        => 'NATIVE_PLSQL',
+        p_plug_source             => q'~declare
+    l_src_link varchar2(261);
+    l_tgt_link varchar2(261);
+    l_filter   varchar2(32767);
+    l_sql      varchar2(32767);
+
+    function esc(p_text in varchar2) return varchar2 is
+    begin
+        return apex_escape.html(p_text);
+    end;
+
+    procedure print_section(
+        p_title in varchar2,
+        p_sql   in varchar2
+    ) is
+        c       integer;
+        rc      integer;
+        l_rows  number := 0;
+        v1      varchar2(4000);
+        v2      varchar2(4000);
+        v3      varchar2(4000);
+        v4      varchar2(4000);
+        v5      varchar2(4000);
+    begin
+        htp.p('<h3>' || esc(p_title) || '</h3>');
+        htp.p('<table class="t-Report-report"><thead><tr>' ||
+              '<th>Element</th><th>Quelle</th><th>Ziel</th><th>Status</th><th>Info</th>' ||
+              '</tr></thead><tbody>');
+
+        c := dbms_sql.open_cursor;
+        dbms_sql.parse(c, p_sql, dbms_sql.native);
+        dbms_sql.define_column(c, 1, v1, 4000);
+        dbms_sql.define_column(c, 2, v2, 4000);
+        dbms_sql.define_column(c, 3, v3, 4000);
+        dbms_sql.define_column(c, 4, v4, 4000);
+        dbms_sql.define_column(c, 5, v5, 4000);
+        rc := dbms_sql.execute(c);
+
+        loop
+            exit when dbms_sql.fetch_rows(c) = 0 or l_rows >= 200;
+            dbms_sql.column_value(c, 1, v1);
+            dbms_sql.column_value(c, 2, v2);
+            dbms_sql.column_value(c, 3, v3);
+            dbms_sql.column_value(c, 4, v4);
+            dbms_sql.column_value(c, 5, v5);
+            l_rows := l_rows + 1;
+
+            htp.p('<tr><td>' || esc(v1) || '</td><td>' || esc(v2) ||
+                  '</td><td>' || esc(v3) || '</td><td>' || esc(v4) ||
+                  '</td><td>' || esc(v5) || '</td></tr>');
+        end loop;
+
+        dbms_sql.close_cursor(c);
+
+        if l_rows = 0 then
+            htp.p('<tr><td colspan="5">Keine Daten gefunden.</td></tr>');
+        elsif l_rows >= 200 then
+            htp.p('<tr><td colspan="5">Ausgabe auf 200 Zeilen begrenzt.</td></tr>');
+        end if;
+
+        htp.p('</tbody></table>');
+    exception
+        when others then
+            if dbms_sql.is_open(c) then
+                dbms_sql.close_cursor(c);
+            end if;
+            htp.p('<div class="t-Alert t-Alert--warning"><strong>' ||
+                  esc(p_title) || ':</strong> ' || esc(sqlerrm) || '</div>');
+    end;
+begin
+    if :P9_COMPARE_OK is null then
+        htp.p('<div class="t-Alert t-Alert--warning">Kein Vergleich moeglich: ' ||
+              esc(:P9_STATUS_TEXT) || '</div>');
+        return;
+    end if;
+
+    l_src_link := dbms_assert.simple_sql_name(:P9_SRC_DBLINK_NAME);
+    l_tgt_link := dbms_assert.simple_sql_name(:P9_TGT_DBLINK_NAME);
+
+    if :P9_SCHEMA_NAME = '__ALL_APP_SCHEMAS__' then
+        l_filter := 'owner not in (''SYS'',''SYSTEM'',''OUTLN'',''DBSNMP'',''APPQOSSYS'',''XDB'',' ||
+                    '''WMSYS'',''CTXSYS'',''ORDSYS'',''ORDDATA'',''MDSYS'',''LBACSYS'',' ||
+                    '''GSMADMIN_INTERNAL'',''OJVMSYS'',''AUDSYS'',''DVSYS'',''DVF'',' ||
+                    '''APEX_240100'',''APEX_PUBLIC_USER'',''ORDS_PUBLIC_USER'')';
+    else
+        l_filter := 'owner = ''' || replace(upper(:P9_SCHEMA_NAME), '''', '''''') || '''';
+    end if;
+
+    l_sql :=
+        'with src as (' ||
+        '  select owner||''.''||object_type element, count(*) cnt' ||
+        '  from all_objects@' || l_src_link ||
+        '  where ' || l_filter ||
+        '  and object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',' ||
+        '                      ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',' ||
+        '                      ''INDEX'',''SYNONYM'',''TYPE'',''TYPE BODY'')' ||
+        '  and object_name not like ''BIN$%''' ||
+        '  group by owner, object_type' ||
+        '), tgt as (' ||
+        '  select owner||''.''||object_type element, count(*) cnt' ||
+        '  from all_objects@' || l_tgt_link ||
+        '  where ' || l_filter ||
+        '  and object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',' ||
+        '                      ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',' ||
+        '                      ''INDEX'',''SYNONYM'',''TYPE'',''TYPE BODY'')' ||
+        '  and object_name not like ''BIN$%''' ||
+        '  group by owner, object_type' ||
+        ') select coalesce(src.element,tgt.element),' ||
+        '         to_char(nvl(src.cnt,0)), to_char(nvl(tgt.cnt,0)),' ||
+        '         case when nvl(src.cnt,0)=nvl(tgt.cnt,0) then ''OK'' else ''DIFF'' end,' ||
+        '         null' ||
+        '  from src full outer join tgt on tgt.element=src.element' ||
+        '  order by 1';
+    print_section('Objektanzahl nach Schema und Typ', l_sql);
+
+    l_sql :=
+        'select ''QUELLE: ''||owner||''.''||object_name, object_type, status,' ||
+        '       to_char(last_ddl_time,''DD.MM.YYYY HH24:MI''), null' ||
+        '  from all_objects@' || l_src_link ||
+        ' where ' || l_filter || ' and status <> ''VALID'' and object_name not like ''BIN$%''' ||
+        ' union all ' ||
+        'select ''ZIEL: ''||owner||''.''||object_name, object_type, status,' ||
+        '       to_char(last_ddl_time,''DD.MM.YYYY HH24:MI''), null' ||
+        '  from all_objects@' || l_tgt_link ||
+        ' where ' || l_filter || ' and status <> ''VALID'' and object_name not like ''BIN$%''' ||
+        ' order by 1';
+    print_section('Ungueltige Objekte', l_sql);
+
+    l_sql :=
+        'select owner||''.''||object_name, object_type, status,' ||
+        '       to_char(last_ddl_time,''DD.MM.YYYY HH24:MI''), ''Quelle nach Referenzdatum geaendert''' ||
+        '  from all_objects@' || l_src_link ||
+        ' where ' || l_filter ||
+        '   and last_ddl_time > to_date(''' || :P9_MIGRATION_DATE || ''',''YYYY-MM-DD'')' ||
+        '   and object_name not like ''BIN$%''' ||
+        ' order by last_ddl_time desc';
+    print_section('Forward Changes auf Quelle', l_sql);
+
+    l_sql :=
+        'with src as (' ||
+        '  select nvl(tablespace_name,''<NULL>'') element, count(*) cnt' ||
+        '  from all_tables@' || l_src_link || ' where ' || l_filter ||
+        '  group by nvl(tablespace_name,''<NULL>'')' ||
+        '), tgt as (' ||
+        '  select nvl(tablespace_name,''<NULL>'') element, count(*) cnt' ||
+        '  from all_tables@' || l_tgt_link || ' where ' || l_filter ||
+        '  group by nvl(tablespace_name,''<NULL>'')' ||
+        ') select coalesce(src.element,tgt.element),' ||
+        '         to_char(nvl(src.cnt,0)), to_char(nvl(tgt.cnt,0)),' ||
+        '         case when nvl(src.cnt,0)=nvl(tgt.cnt,0) then ''OK'' else ''DIFF'' end,' ||
+        '         null' ||
+        '  from src full outer join tgt on tgt.element=src.element' ||
+        '  order by 1';
+    print_section('Tablespace-Vergleich', l_sql);
+
+    l_sql :=
+        'with src as (' ||
+        '  select application_id, application_name, workspace,' ||
+        '         (select count(*) from apex_application_pages@' || l_src_link ||
+        '           p where p.application_id = a.application_id) pages' ||
+        '    from apex_applications@' || l_src_link ||
+        '         a where upper(workspace) <> ''INTERNAL''' ||
+        '), tgt as (' ||
+        '  select application_id, application_name, workspace,' ||
+        '         (select count(*) from apex_application_pages@' || l_tgt_link ||
+        '           p where p.application_id = a.application_id) pages' ||
+        '    from apex_applications@' || l_tgt_link ||
+        '         a where upper(workspace) <> ''INTERNAL''' ||
+        ') select to_char(coalesce(src.application_id,tgt.application_id))||'' ''||' ||
+        '         coalesce(src.application_name,tgt.application_name),' ||
+        '         src.workspace||'' / Seiten ''||src.pages,' ||
+        '         tgt.workspace||'' / Seiten ''||tgt.pages,' ||
+        '         case when src.application_id is null then ''NUR_ZIEL''' ||
+        '              when tgt.application_id is null then ''NUR_QUELLE''' ||
+        '              when nvl(src.pages,-1)=nvl(tgt.pages,-1) then ''OK'' else ''DIFF'' end,' ||
+        '         null' ||
+        '  from src full outer join tgt on tgt.application_id=src.application_id' ||
+        '  order by 1';
+    print_section('APEX-Anwendungen', l_sql);
+end;~',
+        p_plug_display_condition_type => 'ITEM_IS_NOT_NULL',
+        p_plug_display_when_condition => 'P9_COMPARE_OK');
 
     -- -------------------------------------------------------------------------
     -- Before Header 1: Source/Target DB Links aus gewaehltem Mapping ableiten
@@ -378,7 +578,7 @@ begin
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1')),
-        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
         p_display_condition_type      => 'ITEM_IS_NOT_NULL',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
@@ -453,7 +653,7 @@ begin
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1, 3, 2')),
-        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
         p_display_condition_type      => 'ITEM_IS_NOT_NULL',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
@@ -510,7 +710,7 @@ begin
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 4 desc nulls last, 2, 1')),
-        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
         p_display_condition_type      => 'ITEM_IS_NOT_NULL',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
@@ -592,7 +792,7 @@ begin
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1')),
-        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
         p_display_condition_type      => 'ITEM_IS_NOT_NULL',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
@@ -680,7 +880,7 @@ begin
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1')),
-        p_display_when_condition      => 'P9_COMPARE_OK',
+        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
         p_display_condition_type      => 'ITEM_IS_NOT_NULL',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
