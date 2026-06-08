@@ -2,6 +2,7 @@ set echo on
 set define off
 set pagesize 200
 set linesize 240
+set serveroutput on
 whenever sqlerror exit sql.sqlcode rollback
 
 --------------------------------------------------------------------------------
@@ -44,6 +45,60 @@ prompt === PRIVATE DB LINKS ===
 select db_link, username, host
 from   user_db_links
 order  by db_link;
+
+prompt === DB LINK REACHABILITY TESTS ===
+declare
+    l_dummy number;
+
+    procedure test_link(p_link in varchar2) is
+    begin
+        execute immediate 'select 1 from dual@' || dbms_assert.simple_sql_name(p_link)
+            into l_dummy;
+        dbms_output.put_line(rpad(p_link, 35) || ' OK');
+    exception
+        when others then
+            dbms_output.put_line(rpad(p_link, 35) || ' FEHLER: ' || sqlerrm);
+    end;
+begin
+    for r in (
+        select db_link
+        from   user_db_links
+        where  db_link in (
+                   'RZHS184_SEMINAR_INT',
+                   'RZHS440_SEMINAR_INT',
+                   'RZHS184_SEMINAR_TEST',
+                   'RZHS440_SEMINAR_TEST',
+                   'RZHS184_OPK_PROD',
+                   'RZHS440_OPK_PROD',
+                   'RZHS184_OPK_ENTW',
+                   'RZHS440_OPK_ENTW',
+                   'RZHS184_OPK_INT',
+                   'RZHS440_OPK_INT',
+                   'RZHS184_SUPPORT_FREE_PROD',
+                   'RZHS440_SUPPORT_FREE_PROD',
+                   'RZHS184_SUPPORT_FREE_ENTW',
+                   'RZHS440_SUPPORT_FREE_ENTW',
+                   'RZHS184_SUPPORT_FREE_INT',
+                   'RZHS440_SUPPORT_FREE_INT',
+                   'RZHS184_PINGO_PROD',
+                   'RZHS440_PINGO_PROD',
+                   'RZHS184_PINGO_INT',
+                   'RZHS440_PINGO_INT',
+                   'RZHS184_PINGO_ENTW',
+                   'RZHS440_PINGO_ENTW',
+                   'RZHS159_ITPROD',
+                   'RZHS441_ITFALLPROD',
+                   'RZHS441_ITFALINT',
+                   'RZHS441_ITFALLENTW',
+                   'RZHS406_PARADOX_PROD',
+                   'RZHS440_GGPROD'
+               )
+        order  by db_link
+    ) loop
+        test_link(r.db_link);
+    end loop;
+end;
+/
 
 prompt === RUNNABLE LIVE VERGLEICH MAPPINGS ===
 select fv.fv_name,

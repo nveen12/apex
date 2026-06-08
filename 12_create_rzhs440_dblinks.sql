@@ -17,9 +17,11 @@ whenever sqlerror exit sql.sqlcode rollback
 --------------------------------------------------------------------------------
 
 accept dblink_system_password char prompt 'SYSTEM password for DB links: ' hide
+accept recreate_existing_links char default 'Y' prompt 'Drop/recreate existing MIGRATION private DB links? [Y/n]: '
 
 declare
     l_password varchar2(4000) := replace('&&dblink_system_password', '"', '""');
+    l_recreate varchar2(1) := upper(substr(nvl('&&recreate_existing_links', 'Y'), 1, 1));
 
     procedure ensure_link(
         p_name    in varchar2,
@@ -33,6 +35,12 @@ declare
         into   l_count
         from   user_db_links
         where  db_link = upper(p_name);
+
+        if l_count > 0 and l_recreate = 'Y' then
+            execute immediate 'drop database link ' || dbms_assert.simple_sql_name(p_name);
+            l_count := 0;
+            dbms_output.put_line('DROPPED ' || p_name);
+        end if;
 
         if l_count = 0 then
             l_sql :=

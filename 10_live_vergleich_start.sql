@@ -10,7 +10,7 @@ whenever sqlerror exit sql.sqlcode rollback
 
 declare
     l_workspace_id number;
-    l_app_id       number := 114;
+    l_app_id       number;
     l_region_id    number := 91000000000000010;
     l_action_region_id number := 91000000000000015;
     l_button_id    number := 91000000000000020;
@@ -22,6 +22,17 @@ begin
     where  workspace = 'MIGRATION';
 
     apex_util.set_security_group_id(l_workspace_id);
+
+    select application_id
+    into   l_app_id
+    from (
+        select application_id
+        from   apex_applications
+        where  workspace = 'MIGRATION'
+        and    application_name = 'Migration_Tracker'
+        order  by application_id
+    )
+    where rownum = 1;
 
     select list_id
     into   l_nav_list_id
@@ -73,12 +84,11 @@ begin
             '           when fv.fv_kuerzel in (''GG'', ''IT_FALL'') then fv.fv_kuerzel',
             '           else sc.cdb_name',
             '       end',
-            '       || '' | '' || src.hostname',
-            '       || '' -> '' || tgt.hostname',
+            '       || '' | SRC '' || src.hostname || ''/'' || nvl(sp.service_name, sp.pdb_name)',
+            '       || '' -> TGT '' || tgt.hostname || ''/'' || nvl(tp.service_name, tp.pdb_name)',
             '       || '' | '' || nvl(tp.tier, nvl(sp.tier, ''STAGE?''))',
-            '       || '' | '' || nvl(tp.service_name, ''kein Service'')',
-            '       || '' | SRC='' || nvl(sp.dblink_name, ''kein SRC-Link'')',
-            '       || '' | TGT='' || nvl(tp.dblink_name, ''kein TGT-Link'') as display_value,',
+            '       || '' | SRC-LINK='' || nvl(sp.dblink_name, ''kein SRC-Link'')',
+            '       || '' | TGT-LINK='' || nvl(tp.dblink_name, ''kein TGT-Link'') as display_value,',
             '       tm.mapping_id as return_value',
             'from   mt_fachverfahren fv',
             'join   mt_fv_pdb_mapping tm on tm.fv_id = fv.fv_id',
