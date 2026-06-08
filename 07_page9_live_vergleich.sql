@@ -291,7 +291,11 @@ begin
         l_filter := 'owner not in (''SYS'',''SYSTEM'',''OUTLN'',''DBSNMP'',''APPQOSSYS'',''XDB'',' ||
                     '''WMSYS'',''CTXSYS'',''ORDSYS'',''ORDDATA'',''MDSYS'',''LBACSYS'',' ||
                     '''GSMADMIN_INTERNAL'',''OJVMSYS'',''AUDSYS'',''DVSYS'',''DVF'',' ||
-                    '''APEX_240100'',''APEX_PUBLIC_USER'',''ORDS_PUBLIC_USER'')';
+                    '''PUBLIC'',''APEX_PUBLIC_USER'',''APEX_LISTENER'',''ORDS_PUBLIC_USER'',' ||
+                    '''ORDS_METADATA'',''FLOWS_FILES'',''REMOTE_SCHEDULER_AGENT'',''DBSFWUSER'',' ||
+                    '''ORACLE_OCM'',''OLAPSYS'',''SI_INFORMTN_SCHEMA'',''MDDATA'',''ANONYMOUS'',' ||
+                    '''MIGRATION'')' ||
+                    ' and owner not like ''APEX\_%'' escape ''\''';
     else
         l_filter := 'owner = ''' || replace(upper(:P9_SCHEMA_NAME), '''', '''''') || '''';
     end if;
@@ -369,13 +373,13 @@ begin
         '         (select count(*) from apex_application_pages@' || l_src_link ||
         '           p where p.application_id = a.application_id) pages' ||
         '    from apex_applications@' || l_src_link ||
-        '         a where upper(workspace) <> ''INTERNAL''' ||
+        '         a where upper(workspace) not in (''INTERNAL'',''MIGRATION'',''COM.ORACLE.CUST.REPOSITORY'')' ||
         '), tgt as (' ||
         '  select application_id, application_name, workspace,' ||
         '         (select count(*) from apex_application_pages@' || l_tgt_link ||
         '           p where p.application_id = a.application_id) pages' ||
         '    from apex_applications@' || l_tgt_link ||
-        '         a where upper(workspace) <> ''INTERNAL''' ||
+        '         a where upper(workspace) not in (''INTERNAL'',''MIGRATION'',''COM.ORACLE.CUST.REPOSITORY'')' ||
         ') select to_char(coalesce(src.application_id,tgt.application_id))||'' ''||' ||
         '         coalesce(src.application_name,tgt.application_name),' ||
         '         src.workspace||'' / Seiten ''||src.pages,' ||
@@ -385,6 +389,7 @@ begin
         '              when nvl(src.pages,-1)=nvl(tgt.pages,-1) then ''OK'' else ''DIFF'' end,' ||
         '         null' ||
         '  from src full outer join tgt on tgt.application_id=src.application_id' ||
+        '                            and tgt.application_name=src.application_name' ||
         '  order by 1';
     print_section('APEX-Anwendungen', l_sql);
 end;~',

@@ -96,7 +96,11 @@ declare
             ' where username not in (''SYS'',''SYSTEM'',''OUTLN'',''DBSNMP'',''APPQOSSYS'',''XDB'',' ||
             '                       ''WMSYS'',''CTXSYS'',''ORDSYS'',''ORDDATA'',''MDSYS'',''LBACSYS'',' ||
             '                       ''GSMADMIN_INTERNAL'',''OJVMSYS'',''AUDSYS'',''DVSYS'',''DVF'',' ||
-            '                       ''APEX_240100'',''APEX_PUBLIC_USER'',''ORDS_PUBLIC_USER'')');
+            '                       ''PUBLIC'',''APEX_PUBLIC_USER'',''APEX_LISTENER'',''ORDS_PUBLIC_USER'',' ||
+            '                       ''ORDS_METADATA'',''FLOWS_FILES'',''REMOTE_SCHEDULER_AGENT'',''DBSFWUSER'',' ||
+            '                       ''ORACLE_OCM'',''OLAPSYS'',''SI_INFORMTN_SCHEMA'',''MDDATA'',''ANONYMOUS'',' ||
+            '                       ''MIGRATION'')' ||
+            ' and username not like ''APEX\_%'' escape ''\''');
 
         test_sql(
             'all_objects app scope',
@@ -104,7 +108,11 @@ declare
             ' where owner not in (''SYS'',''SYSTEM'',''OUTLN'',''DBSNMP'',''APPQOSSYS'',''XDB'',' ||
             '                     ''WMSYS'',''CTXSYS'',''ORDSYS'',''ORDDATA'',''MDSYS'',''LBACSYS'',' ||
             '                     ''GSMADMIN_INTERNAL'',''OJVMSYS'',''AUDSYS'',''DVSYS'',''DVF'',' ||
-            '                     ''APEX_240100'',''APEX_PUBLIC_USER'',''ORDS_PUBLIC_USER'')' ||
+            '                     ''PUBLIC'',''APEX_PUBLIC_USER'',''APEX_LISTENER'',''ORDS_PUBLIC_USER'',' ||
+            '                     ''ORDS_METADATA'',''FLOWS_FILES'',''REMOTE_SCHEDULER_AGENT'',''DBSFWUSER'',' ||
+            '                     ''ORACLE_OCM'',''OLAPSYS'',''SI_INFORMTN_SCHEMA'',''MDDATA'',''ANONYMOUS'',' ||
+            '                     ''MIGRATION'')' ||
+            ' and owner not like ''APEX\_%'' escape ''\''' ||
             ' and object_name not like ''BIN$%''');
 
         test_sql(
@@ -113,12 +121,16 @@ declare
             ' where owner not in (''SYS'',''SYSTEM'',''OUTLN'',''DBSNMP'',''APPQOSSYS'',''XDB'',' ||
             '                     ''WMSYS'',''CTXSYS'',''ORDSYS'',''ORDDATA'',''MDSYS'',''LBACSYS'',' ||
             '                     ''GSMADMIN_INTERNAL'',''OJVMSYS'',''AUDSYS'',''DVSYS'',''DVF'',' ||
-            '                     ''APEX_240100'',''APEX_PUBLIC_USER'',''ORDS_PUBLIC_USER'')');
+            '                     ''PUBLIC'',''APEX_PUBLIC_USER'',''APEX_LISTENER'',''ORDS_PUBLIC_USER'',' ||
+            '                     ''ORDS_METADATA'',''FLOWS_FILES'',''REMOTE_SCHEDULER_AGENT'',''DBSFWUSER'',' ||
+            '                     ''ORACLE_OCM'',''OLAPSYS'',''SI_INFORMTN_SCHEMA'',''MDDATA'',''ANONYMOUS'',' ||
+            '                     ''MIGRATION'')' ||
+            ' and owner not like ''APEX\_%'' escape ''\''');
 
         test_sql(
             'apex_applications',
             'select count(*) from apex_applications@' || l_link ||
-            ' where upper(workspace) <> ''INTERNAL''');
+            ' where upper(workspace) not in (''INTERNAL'',''MIGRATION'',''COM.ORACLE.CUST.REPOSITORY'')');
 
         test_sql(
             'apex_application_pages',
@@ -132,7 +144,11 @@ declare
             '  where owner not in (''SYS'',''SYSTEM'',''OUTLN'',''DBSNMP'',''APPQOSSYS'',''XDB'',' ||
             '                      ''WMSYS'',''CTXSYS'',''ORDSYS'',''ORDDATA'',''MDSYS'',''LBACSYS'',' ||
             '                      ''GSMADMIN_INTERNAL'',''OJVMSYS'',''AUDSYS'',''DVSYS'',''DVF'',' ||
-            '                      ''APEX_240100'',''APEX_PUBLIC_USER'',''ORDS_PUBLIC_USER'')' ||
+            '                      ''PUBLIC'',''APEX_PUBLIC_USER'',''APEX_LISTENER'',''ORDS_PUBLIC_USER'',' ||
+            '                      ''ORDS_METADATA'',''FLOWS_FILES'',''REMOTE_SCHEDULER_AGENT'',''DBSFWUSER'',' ||
+            '                      ''ORACLE_OCM'',''OLAPSYS'',''SI_INFORMTN_SCHEMA'',''MDDATA'',''ANONYMOUS'',' ||
+            '                      ''MIGRATION'')' ||
+            '  and owner not like ''APEX\_%'' escape ''\''' ||
             '  and object_name not like ''BIN$%''' ||
             '  group by owner' ||
             '  order by count(*) desc, owner' ||
