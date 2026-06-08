@@ -58,6 +58,20 @@ declare
             line('    FEHLER ' || rpad(p_label, 32) || ' => ' || sqlerrm);
     end;
 
+    procedure close_link(p_link in varchar2) is
+    begin
+        commit;
+        execute immediate 'alter session close database link ' ||
+            dbms_assert.qualified_sql_name(p_link);
+        line('    CLOSED ' || p_link);
+    exception
+        when others then
+            -- ORA-02080/02081 means the link is not open in this session; harmless here.
+            if sqlcode not in (-2080, -2081) then
+                line('    WARN   close ' || p_link || ' => ' || sqlerrm);
+            end if;
+    end;
+
     procedure test_link(p_link in varchar2) is
         l_link varchar2(261) := dbms_assert.qualified_sql_name(p_link);
     begin
@@ -162,6 +176,8 @@ declare
                 line('      <keine sichtbaren Anwendungsobjekte>');
             end if;
         end;
+
+        close_link(p_link);
     end;
 begin
     line('=== LIVE VERGLEICH DB-LINK DIAGNOSE ===');
