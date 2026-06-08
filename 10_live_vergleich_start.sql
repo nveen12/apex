@@ -221,7 +221,10 @@ begin
         p_process_name           => 'Fachverfahren und Schema ableiten',
         p_process_sql_clob       => wwv_flow_string.join(wwv_flow_t_varchar2(
             'begin',
-            '    select fv.fv_id, fv.schema_name',
+            '    -- Page 10 compares the whole selected source/target service.',
+            '    -- Specific schema comparison can still be called directly by passing',
+            '    -- P9_SCHEMA_NAME from another page.',
+            '    select fv.fv_id, ''__ALL_APP_SCHEMAS__''',
             '    into   :P10_FV_ID, :P10_SCHEMA_NAME',
             '    from   mt_fv_pdb_mapping m',
             '    join   mt_fachverfahren fv on fv.fv_id = m.fv_id',
@@ -276,6 +279,11 @@ end;
 
 select page_id, page_name
 from   apex_application_pages
-where  application_id = 114
+where  application_id = (
+           select min(application_id)
+           from   apex_applications
+           where  workspace = 'MIGRATION'
+           and    application_name = 'Migration_Tracker'
+       )
 and    page_id in (9, 10)
 order  by page_id;
