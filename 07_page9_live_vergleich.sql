@@ -211,7 +211,8 @@ begin
         p_plug_source             => q'~declare
     l_src_link varchar2(261);
     l_tgt_link varchar2(261);
-    l_filter   varchar2(32767);
+    l_src_filter varchar2(32767);
+    l_tgt_filter varchar2(32767);
     l_sql      varchar2(32767);
 
     function esc(p_text in varchar2) return varchar2 is
@@ -316,23 +317,32 @@ begin
     l_tgt_link := dbms_assert.simple_sql_name(:P9_TGT_DBLINK_NAME);
 
     if :P9_SCHEMA_NAME = '__ALL_APP_SCHEMAS__' then
-        l_filter := 'owner not in (''SYS'',''SYSTEM'',''OUTLN'',''DBSNMP'',''APPQOSSYS'',''XDB'',' ||
-                    '''WMSYS'',''CTXSYS'',''ORDSYS'',''ORDDATA'',''MDSYS'',''LBACSYS'',' ||
-                    '''GSMADMIN_INTERNAL'',''OJVMSYS'',''AUDSYS'',''DVSYS'',''DVF'',' ||
-                    '''PUBLIC'',''APEX_PUBLIC_USER'',''APEX_LISTENER'',''ORDS_PUBLIC_USER'',' ||
-                    '''ORDS_METADATA'',''FLOWS_FILES'',''REMOTE_SCHEDULER_AGENT'',''DBSFWUSER'',' ||
-                    '''ORACLE_OCM'',''OLAPSYS'',''SI_INFORMTN_SCHEMA'',''MDDATA'',''ANONYMOUS'',' ||
-                    '''MIGRATION'')' ||
-                    ' and owner not like ''APEX\_%'' escape ''\''';
+        -- Target databases are 19c, so ORACLE_MAINTAINED is reliable there.
+        -- Source databases may be older, so do not query ORACLE_MAINTAINED on source.
+        -- Instead, derive the custom schema set from target and compare those same
+        -- schema names on source.
+        l_src_filter := 'owner in (' ||
+                        'select username from all_users@' || l_tgt_link ||
+                        ' where oracle_maintained = ''N''' ||
+                        ' and username not in (''MIGRATION'',''APEX_LISTENER'',''ORDS_METADATA'',' ||
+                        '''ORDS_PUBLIC_USER'',''APEX_PUBLIC_USER'',''FLOWS_FILES'')' ||
+                        ' and username not like ''APEX\_%'' escape ''\'')';
+        l_tgt_filter := 'owner in (' ||
+                        'select username from all_users@' || l_tgt_link ||
+                        ' where oracle_maintained = ''N''' ||
+                        ' and username not in (''MIGRATION'',''APEX_LISTENER'',''ORDS_METADATA'',' ||
+                        '''ORDS_PUBLIC_USER'',''APEX_PUBLIC_USER'',''FLOWS_FILES'')' ||
+                        ' and username not like ''APEX\_%'' escape ''\'')';
     else
-        l_filter := 'owner = ''' || replace(upper(:P9_SCHEMA_NAME), '''', '''''') || '''';
+        l_src_filter := 'owner = ''' || replace(upper(:P9_SCHEMA_NAME), '''', '''''') || '''';
+        l_tgt_filter := l_src_filter;
     end if;
 
     l_sql :=
         'with src as (' ||
         '  select owner||''.''||object_type element, count(*) cnt' ||
         '  from all_objects@' || l_src_link ||
-        '  where ' || l_filter ||
+        '  where ' || l_src_filter ||
         '  and object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',' ||
         '                      ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',' ||
         '                      ''INDEX'',''SYNONYM'',''TYPE'',''TYPE BODY'')' ||
@@ -341,7 +351,7 @@ begin
         '), tgt as (' ||
         '  select owner||''.''||object_type element, count(*) cnt' ||
         '  from all_objects@' || l_tgt_link ||
-        '  where ' || l_filter ||
+        '  where ' || l_tgt_filter ||
         '  and object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',' ||
         '                      ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',' ||
         '                      ''INDEX'',''SYNONYM'',''TYPE'',''TYPE BODY'')' ||
@@ -366,12 +376,12 @@ begin
         'with src as (' ||
         '  select owner, object_name, object_type, status, last_ddl_time' ||
         '  from all_objects@' || l_src_link ||
-        '  where ' || l_filter ||
+        '  where ' || l_src_filter ||
         '  and object_name not like ''BIN$%''' ||
         '), tgt as (' ||
         '  select owner, object_name, object_type, status, last_ddl_time' ||
         '  from all_objects@' || l_tgt_link ||
-        '  where ' || l_filter ||
+        '  where ' || l_tgt_filter ||
         '  and object_name not like ''BIN$%''' ||
         ')' ||
         'select tgt.owner||''.''||tgt.object_name,' ||
@@ -399,7 +409,7 @@ begin
         'select owner||''.''||object_name, object_type, status,' ||
         '       to_char(last_ddl_time,''DD.MM.YYYY HH24:MI''), ''Quelle nach Referenzdatum geaendert''' ||
         '  from all_objects@' || l_src_link ||
-        ' where ' || l_filter ||
+        ' where ' || l_src_filter ||
         '   and last_ddl_time > to_date(''' || :P9_MIGRATION_DATE || ''',''YYYY-MM-DD'')' ||
         '   and object_name not like ''BIN$%''' ||
         ' order by last_ddl_time desc';
@@ -415,11 +425,11 @@ begin
     l_sql :=
         'with src as (' ||
         '  select nvl(tablespace_name,''<NULL>'') element, count(*) cnt' ||
-        '  from all_tables@' || l_src_link || ' where ' || l_filter ||
+        '  from all_tables@' || l_src_link || ' where ' || l_src_filter ||
         '  group by nvl(tablespace_name,''<NULL>'')' ||
         '), tgt as (' ||
         '  select nvl(tablespace_name,''<NULL>'') element, count(*) cnt' ||
-        '  from all_tables@' || l_tgt_link || ' where ' || l_filter ||
+        '  from all_tables@' || l_tgt_link || ' where ' || l_tgt_filter ||
         '  group by nvl(tablespace_name,''<NULL>'')' ||
         ') select coalesce(src.element,tgt.element),' ||
         '         to_char(nvl(src.cnt,0)), to_char(nvl(tgt.cnt,0)),' ||
