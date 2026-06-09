@@ -206,6 +206,7 @@ begin
         p_plug_display_point    => 'BODY',
         p_plug_source_type      => 'NATIVE_STATIC',
         p_plug_source           => q'~<style>
+.t-Body-nav,.t-TreeNav{visibility:hidden}
 .mt-overview-wrap{overflow:auto}
 .mt-overview-table{border-collapse:separate;border-spacing:0;width:100%;font-size:.84rem;border:1px solid #d0d7de;border-radius:6px;overflow:hidden}
 .mt-overview-table th{background:#f6f8fa;color:#172033;font-weight:700;border-bottom:1px solid #c9d1d9;padding:7px 9px;text-align:left;white-space:nowrap}
@@ -242,6 +243,9 @@ begin
           anchor.style.display = "none";
         }
       }
+    });
+    document.querySelectorAll(".t-Body-nav,.t-TreeNav,nav").forEach(function(nav){
+      nav.style.visibility = "visible";
     });
   }
   hideOldNavEntries();
@@ -283,15 +287,90 @@ begin
         p_lost_update_check_type  => 'VALUES',
         p_plug_source_type        => 'NATIVE_IG');
 
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(91500000000000100),
+        p_plug_name               => 'APEX Migration ' || unistr('\00DC') || 'bersicht Tabelle',
+        p_title                   => 'APEX Migration ' || unistr('\00DC') || 'bersicht',
+        p_plug_template           => wwv_flow_imp.id(10818657374759767),
+        p_region_template_options => '#DEFAULT#:t-Region--scrollBody',
+        p_plug_display_sequence   => 10,
+        p_plug_display_point      => 'BODY',
+        p_plug_source_type        => 'NATIVE_PLSQL',
+        p_plug_source             => q'~declare
+    l_rows number := 0;
+
+    function esc(p_text in varchar2) return varchar2 is
+    begin
+        return apex_escape.html(p_text);
+    end;
+begin
+    htp.p('<div class="mt-overview-wrap">');
+    htp.p('<table class="mt-overview-table">');
+    htp.p('<thead><tr>' ||
+          '<th>Umgebung</th>' ||
+          '<th>Datenbank</th>' ||
+          '<th>Quelle (Host_DB_PDB)</th>' ||
+          '<th>Ziel (Host_DB_PDB)</th>' ||
+          '<th>Service_Name (Ziel)</th>' ||
+          '<th>APEX Version</th>' ||
+          '<th>Status</th>' ||
+          '<th>URL</th>' ||
+          '</tr></thead><tbody>');
+
+    for r in (
+        select umgebung,
+               datenbank,
+               quelle_host_db_pdb,
+               ziel_host_db_pdb,
+               service_name_ziel,
+               apex_version,
+               status,
+               url
+        from   mt_apex_migration_overview
+        order  by row_sort
+    ) loop
+        l_rows := l_rows + 1;
+        htp.p('<tr>' ||
+              '<td>' || esc(r.umgebung) || '</td>' ||
+              '<td>' || esc(r.datenbank) || '</td>' ||
+              '<td>' || esc(r.quelle_host_db_pdb) || '</td>' ||
+              '<td>' || esc(r.ziel_host_db_pdb) || '</td>' ||
+              '<td>' || esc(r.service_name_ziel) || '</td>' ||
+              '<td>' || esc(r.apex_version) || '</td>' ||
+              '<td><span class="mt-badge mt-badge-ok">' || esc(r.status) || '</span></td>' ||
+              '<td>' ||
+              case
+                  when r.url is null then null
+                  else '<a class="mt-link" href="' || apex_escape.html_attribute(r.url) ||
+                       '" target="_blank" rel="noopener noreferrer">' || esc(r.url) || '</a>'
+              end ||
+              '</td>' ||
+              '</tr>');
+    end loop;
+
+    if l_rows = 0 then
+        htp.p('<tr><td colspan="8">Keine Eintraege gefunden.</td></tr>');
+    end if;
+
+    htp.p('</tbody></table></div>');
+exception
+    when others then
+        htp.p('<div class="t-Alert t-Alert--warning"><strong>APEX Migration Uebersicht:</strong> ' ||
+              esc(sqlerrm) || '</div>');
+end;~',
+        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N')).to_clob);
+
     wwv_flow_imp_page.create_report_region(
         p_id                         => wwv_flow_imp.id(91500000000000110),
         p_name                       => 'APEX Migration ' || unistr('\00DC') || 'bersicht Report',
         p_title                      => 'APEX Migration ' || unistr('\00DC') || 'bersicht',
         p_template                   => wwv_flow_imp.id(10818657374759767),
-        p_display_sequence           => 10,
+        p_display_sequence           => 998,
         p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
         p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
         p_display_point              => 'BODY',
+        p_display_condition_type     => 'NEVER',
         p_source_type                => 'NATIVE_SQL_REPORT',
         p_query_type                 => 'SQL',
         p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(

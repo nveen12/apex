@@ -69,7 +69,8 @@ begin
         p_plug_display_sequence => 1,
         p_plug_display_point    => 'BODY',
         p_plug_source_type      => 'NATIVE_STATIC',
-        p_plug_source           => q'~<script>
+        p_plug_source           => q'~<style>.t-Body-nav,.t-TreeNav{visibility:hidden}</style>
+<script>
 (function(){
   function hideOldNavEntries(){
     var hiddenTexts = {
@@ -91,6 +92,9 @@ begin
           anchor.style.display = "none";
         }
       }
+    });
+    document.querySelectorAll(".t-Body-nav,.t-TreeNav,nav").forEach(function(nav){
+      nav.style.visibility = "visible";
     });
   }
   hideOldNavEntries();

@@ -158,7 +158,8 @@ begin
         p_plug_template           => wwv_flow_imp.id(10818657374759767),
         p_plug_display_sequence   => 20,
         p_plug_display_point      => 'BODY',
-        p_plug_source             => q'~<script>
+        p_plug_source             => q'~<style>.t-Body-nav,.t-TreeNav{visibility:hidden}</style>
+<script>
 (function(){
   function hideOldNavEntries(){
     var hiddenTexts = {
@@ -180,6 +181,9 @@ begin
           anchor.style.display = "none";
         }
       }
+    });
+    document.querySelectorAll(".t-Body-nav,.t-TreeNav,nav").forEach(function(nav){
+      nav.style.visibility = "visible";
     });
   }
   hideOldNavEntries();
