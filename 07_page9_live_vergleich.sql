@@ -213,6 +213,7 @@ begin
     l_tgt_link varchar2(261);
     l_src_filter varchar2(32767);
     l_tgt_filter varchar2(32767);
+    l_app_filter varchar2(32767);
     l_sql      varchar2(32767);
 
     function esc(p_text in varchar2) return varchar2 is
@@ -253,7 +254,8 @@ begin
             .mt-live-table tr:last-child td{border-bottom:0}
             .mt-live-table td:first-child{font-family:Consolas,''Courier New'',monospace}
             .mt-status-ok{color:#166534;font-weight:700}
-            .mt-status-diff,.mt-status-invalid,.mt-status-fehler,.mt-status-nur-quelle,.mt-status-nur-ziel{color:#b42318;font-weight:700}
+            .mt-status-diff,.mt-status-invalid,.mt-status-fehler,.mt-status-nur-quelle,.mt-status-nur-ziel,
+            .mt-status-page-count-diff,.mt-status-nur-quelle-page,.mt-status-nur-ziel-page{color:#b42318;font-weight:700}
             .mt-status-info{color:#475569;font-weight:600}
             .mt-muted{color:#666}
         </style>');
@@ -306,6 +308,267 @@ begin
             htp.p('<div class="t-Alert t-Alert--warning"><strong>' ||
                   esc(p_title) || ':</strong> ' || esc(sqlerrm) || '</div>');
     end;
+
+    function remote_col_exists(
+        p_link in varchar2,
+        p_view in varchar2,
+        p_col  in varchar2
+    ) return boolean is
+        l_count number;
+    begin
+        execute immediate
+            'select count(*) from all_tab_columns@' || p_link ||
+            ' where table_name = upper(:view_name)' ||
+            ' and column_name = upper(:column_name)'
+            into l_count
+            using p_view, p_col;
+        return l_count > 0;
+    exception
+        when others then
+            return false;
+    end;
+
+    procedure print_runtime_risks(
+        p_src_link   in varchar2,
+        p_tgt_link   in varchar2,
+        p_app_filter in varchar2
+    ) is
+        l_rows       number := 0;
+        l_skipped    number := 0;
+        c            integer;
+        rc           integer;
+        v1           varchar2(4000);
+        v2           varchar2(4000);
+        v3           varchar2(4000);
+        v4           varchar2(4000);
+        v5           varchar2(4000);
+
+        procedure row_out(
+            p1 in varchar2,
+            p2 in varchar2,
+            p3 in varchar2,
+            p4 in varchar2,
+            p5 in varchar2
+        ) is
+        begin
+            if l_rows >= 100 then
+                return;
+            end if;
+            l_rows := l_rows + 1;
+            htp.p('<tr><td>' || esc(p1) || '</td><td>' || esc(p2) ||
+                  '</td><td>' || esc(p3) || '</td><td class="mt-status-' ||
+                  lower(replace(nvl(p4, 'info'), '_', '-')) || '">' || esc(p4) ||
+                  '</td><td>' || esc(p5) || '</td></tr>');
+        end;
+
+        procedure run_risk_query(
+            p_sql in varchar2
+        ) is
+        begin
+            if l_rows >= 100 then
+                return;
+            end if;
+            c := dbms_sql.open_cursor;
+            dbms_sql.parse(c, p_sql, dbms_sql.native);
+            dbms_sql.define_column(c, 1, v1, 4000);
+            dbms_sql.define_column(c, 2, v2, 4000);
+            dbms_sql.define_column(c, 3, v3, 4000);
+            dbms_sql.define_column(c, 4, v4, 4000);
+            dbms_sql.define_column(c, 5, v5, 4000);
+            rc := dbms_sql.execute(c);
+            loop
+                exit when dbms_sql.fetch_rows(c) = 0 or l_rows >= 100;
+                dbms_sql.column_value(c, 1, v1);
+                dbms_sql.column_value(c, 2, v2);
+                dbms_sql.column_value(c, 3, v3);
+                dbms_sql.column_value(c, 4, v4);
+                dbms_sql.column_value(c, 5, v5);
+                row_out(v1, v2, v3, v4, v5);
+            end loop;
+            dbms_sql.close_cursor(c);
+        exception
+            when others then
+                if dbms_sql.is_open(c) then
+                    dbms_sql.close_cursor(c);
+                end if;
+                row_out('METADATA', '-', '-', 'INFO',
+                        'Teilpruefung uebersprungen: ' || sqlerrm);
+        end;
+    begin
+        htp.p('<div class="mt-live-section">');
+        htp.p('<h3>APEX Runtime-Risiken</h3>');
+        htp.p('<table class="mt-live-table"><thead><tr>' ||
+              '<th>Kategorie</th><th>App / Seite</th><th>Komponente</th>' ||
+              '<th>Risiko</th><th>Hinweis</th></tr></thead><tbody>');
+
+        if remote_col_exists(p_src_link, 'APEX_APPLICATIONS', 'AUTHENTICATION_SCHEME_TYPE')
+           and remote_col_exists(p_tgt_link, 'APEX_APPLICATIONS', 'AUTHENTICATION_SCHEME_TYPE') then
+            run_risk_query(
+                'with src as (' ||
+                '  select application_id, application_name, authentication_scheme_type, authentication_scheme' ||
+                '    from apex_applications@' || p_src_link || ' a where ' || p_app_filter ||
+                '), tgt as (' ||
+                '  select application_id, application_name, authentication_scheme_type, authentication_scheme' ||
+                '    from apex_applications@' || p_tgt_link || ' a where ' || p_app_filter ||
+                ')' ||
+                'select ''AUTH_DIFF'', ''APP ''||to_char(tgt.application_id)||'' ''||tgt.application_name,' ||
+                '       nvl(src.authentication_scheme_type,''-'')||'' -> ''||nvl(tgt.authentication_scheme_type,''-''),' ||
+                '       ''KRITISCH'',' ||
+                '       ''Authentication Scheme Quelle/Ziel unterschiedlich; Login und Rollen testen.''' ||
+                '  from tgt join src on src.application_id = tgt.application_id' ||
+                ' where nvl(src.authentication_scheme_type,''#'') <> nvl(tgt.authentication_scheme_type,''#'')' ||
+                '    or nvl(src.authentication_scheme,''#'') <> nvl(tgt.authentication_scheme,''#'')' ||
+                ' order by 2');
+        else
+            l_skipped := l_skipped + 1;
+        end if;
+
+        if remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGES', 'JAVASCRIPT_CODE')
+           and remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGES', 'INLINE_CSS') then
+            run_risk_query(
+                'select ''JS_CSS'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
+                '       p.page_name, ''PRUEFEN'',' ||
+                '       trim(both '', '' from' ||
+                '            case when p.javascript_file_urls is not null then ''JS-Dateien, '' end ||' ||
+                '            case when p.javascript_code is not null then ''Inline-JS, '' end ||' ||
+                '            case when p.javascript_code_onload is not null then ''Onload-JS, '' end ||' ||
+                '            case when p.css_file_urls is not null then ''CSS-Dateien, '' end ||' ||
+                '            case when p.inline_css is not null then ''Inline-CSS, '' end)' ||
+                '  from apex_application_pages@' || p_tgt_link || ' p' ||
+                '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
+                ' where ' || p_app_filter ||
+                '   and (p.javascript_file_urls is not null or p.javascript_code is not null' ||
+                '        or p.javascript_code_onload is not null or p.css_file_urls is not null' ||
+                '        or p.inline_css is not null)' ||
+                ' order by a.application_id, p.page_id');
+        else
+            l_skipped := l_skipped + 1;
+        end if;
+
+        if remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_REGIONS', 'SOURCE_TYPE_PLUGIN_NAME')
+           and remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_PROC', 'PROCESS_TYPE_PLUGIN_NAME') then
+            run_risk_query(
+                'select ''PLUGIN_USED'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(r.page_id),' ||
+                '       r.region_name, ''WARNUNG'', ''Region Plugin: ''||r.source_type_plugin_name' ||
+                '  from apex_application_page_regions@' || p_tgt_link || ' r' ||
+                '  join apex_applications@' || p_tgt_link || ' a on a.application_id = r.application_id' ||
+                ' where ' || p_app_filter ||
+                '   and r.source_type_plugin_name is not null' ||
+                ' union all' ||
+                ' select ''PLUGIN_USED'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
+                '       p.process_name, ''WARNUNG'', ''Process Plugin: ''||p.process_type_plugin_name' ||
+                '  from apex_application_page_proc@' || p_tgt_link || ' p' ||
+                '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
+                ' where ' || p_app_filter ||
+                '   and p.process_type_plugin_name is not null' ||
+                ' order by 2, 3');
+        else
+            l_skipped := l_skipped + 1;
+        end if;
+
+        if remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_PROC', 'PROCESS_SOURCE') then
+            run_risk_query(
+                'select ''EXTERNAL_CALL'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
+                '       p.process_name, ''PRUEFEN'', ''PL/SQL contains URL/Jasper/Tomcat/HTTP reference''' ||
+                '  from apex_application_page_proc@' || p_tgt_link || ' p' ||
+                '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
+                ' where ' || p_app_filter ||
+                '   and regexp_like(lower(dbms_lob.substr(p.process_source, 4000, 1)),' ||
+                '       ''(https?:|utl_http|apex_web_service|jasper|tomcat|ords|web_service)'')' ||
+                ' order by a.application_id, p.page_id, p.process_name');
+        else
+            l_skipped := l_skipped + 1;
+        end if;
+
+        if remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_REGIONS', 'WEB_SOURCE_MODULE_NAME')
+           and remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_PROC', 'WEB_SOURCE_MODULE_NAME') then
+            run_risk_query(
+                'select ''REST_WEB_SOURCE'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(r.page_id),' ||
+                '       r.region_name, ''PRUEFEN'', ''Region Web Source: ''||r.web_source_module_name' ||
+                '  from apex_application_page_regions@' || p_tgt_link || ' r' ||
+                '  join apex_applications@' || p_tgt_link || ' a on a.application_id = r.application_id' ||
+                ' where ' || p_app_filter ||
+                '   and r.web_source_module_name is not null' ||
+                ' union all' ||
+                ' select ''REST_WEB_SOURCE'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
+                '       p.process_name, ''PRUEFEN'', ''Process Web Source: ''||p.web_source_module_name' ||
+                '  from apex_application_page_proc@' || p_tgt_link || ' p' ||
+                '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
+                ' where ' || p_app_filter ||
+                '   and p.web_source_module_name is not null' ||
+                ' order by 2, 3');
+        else
+            l_skipped := l_skipped + 1;
+        end if;
+
+        if remote_col_exists(p_src_link, 'APEX_APPLICATION_PAGE_PROC', 'PROCESS_ID')
+           and remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_PROC', 'PROCESS_ID') then
+            run_risk_query(
+                'with src as (' ||
+                '  select p.application_id, p.page_id, count(*) cnt' ||
+                '    from apex_application_page_proc@' || p_src_link || ' p' ||
+                '    join apex_applications@' || p_src_link || ' a on a.application_id = p.application_id' ||
+                '   where ' || p_app_filter ||
+                '   group by p.application_id, p.page_id' ||
+                '), tgt as (' ||
+                '  select p.application_id, p.page_id, count(*) cnt' ||
+                '    from apex_application_page_proc@' || p_tgt_link || ' p' ||
+                '    join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
+                '   where ' || p_app_filter ||
+                '   group by p.application_id, p.page_id' ||
+                ')' ||
+                'select ''PROCESS_COUNT_DIFF'', ''APP ''||to_char(coalesce(src.application_id,tgt.application_id))||' ||
+                '       '' / PAGE ''||to_char(coalesce(src.page_id,tgt.page_id)),' ||
+                '       ''Quelle ''||to_char(nvl(src.cnt,0))||'' / Ziel ''||to_char(nvl(tgt.cnt,0)),' ||
+                '       ''WARNUNG'', ''Page Processes unterscheiden sich; Submit/AJAX testen.''' ||
+                '  from src full outer join tgt on tgt.application_id = src.application_id and tgt.page_id = src.page_id' ||
+                ' where nvl(src.cnt,0) <> nvl(tgt.cnt,0)' ||
+                ' order by 2');
+        else
+            l_skipped := l_skipped + 1;
+        end if;
+
+        if remote_col_exists(p_src_link, 'APEX_APPLICATION_PAGE_DA', 'DYNAMIC_ACTION_ID')
+           and remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_DA', 'DYNAMIC_ACTION_ID') then
+            run_risk_query(
+                'with src as (' ||
+                '  select d.application_id, d.page_id, count(*) cnt' ||
+                '    from apex_application_page_da@' || p_src_link || ' d' ||
+                '    join apex_applications@' || p_src_link || ' a on a.application_id = d.application_id' ||
+                '   where ' || p_app_filter ||
+                '   group by d.application_id, d.page_id' ||
+                '), tgt as (' ||
+                '  select d.application_id, d.page_id, count(*) cnt' ||
+                '    from apex_application_page_da@' || p_tgt_link || ' d' ||
+                '    join apex_applications@' || p_tgt_link || ' a on a.application_id = d.application_id' ||
+                '   where ' || p_app_filter ||
+                '   group by d.application_id, d.page_id' ||
+                ')' ||
+                'select ''DYNAMIC_ACTION_DIFF'', ''APP ''||to_char(coalesce(src.application_id,tgt.application_id))||' ||
+                '       '' / PAGE ''||to_char(coalesce(src.page_id,tgt.page_id)),' ||
+                '       ''Quelle ''||to_char(nvl(src.cnt,0))||'' / Ziel ''||to_char(nvl(tgt.cnt,0)),' ||
+                '       ''WARNUNG'', ''Dynamic Actions unterscheiden sich; Browserinteraktion testen.''' ||
+                '  from src full outer join tgt on tgt.application_id = src.application_id and tgt.page_id = src.page_id' ||
+                ' where nvl(src.cnt,0) <> nvl(tgt.cnt,0)' ||
+                ' order by 2');
+        else
+            l_skipped := l_skipped + 1;
+        end if;
+
+        if l_rows = 0 then
+            row_out('APEX Runtime-Risiken', 'APEX Metadaten', 'Basispruefung',
+                    'OK', 'Keine offensichtlichen Runtime-Risiken gefunden. Manuelle Browser-/Fachtests bleiben erforderlich.');
+        elsif l_rows >= 100 then
+            htp.p('<tr><td colspan="5" class="mt-muted">Ausgabe auf 100 Risikozeilen begrenzt.</td></tr>');
+        end if;
+
+        if l_skipped > 0 then
+            htp.p('<tr><td colspan="5" class="mt-muted">' || l_skipped ||
+                  ' Teilpruefung(en) wegen fehlender/alter APEX Dictionary-Spalten uebersprungen.</td></tr>');
+        end if;
+
+        htp.p('</tbody></table></div>');
+    end;
 begin
     if :P9_COMPARE_OK is null then
         htp.p('<div class="t-Alert t-Alert--warning">Kein Vergleich moeglich: ' ||
@@ -333,9 +596,11 @@ begin
                         ' and username not in (''MIGRATION'',''APEX_LISTENER'',''ORDS_METADATA'',' ||
                         '''ORDS_PUBLIC_USER'',''APEX_PUBLIC_USER'',''FLOWS_FILES'')' ||
                         ' and username not like ''APEX\_%'' escape ''\'')';
+        l_app_filter := 'upper(a.workspace) not in (''INTERNAL'',''MIGRATION'',''COM.ORACLE.CUST.REPOSITORY'')';
     else
         l_src_filter := 'owner = ''' || replace(upper(:P9_SCHEMA_NAME), '''', '''''') || '''';
         l_tgt_filter := l_src_filter;
+        l_app_filter := 'upper(a.workspace) = ''' || replace(upper(:P9_SCHEMA_NAME), '''', '''''') || '''';
     end if;
 
     l_sql :=
@@ -461,6 +726,80 @@ begin
         'Ziel Workspace / Seiten',
         'Ergebnis',
         'Hinweis');
+
+    l_sql :=
+        'with src_apps as (' ||
+        '  select a.application_id, a.application_name, a.workspace,' ||
+        '         (select count(*) from apex_application_pages@' || l_src_link ||
+        '           p where p.application_id = a.application_id) page_count' ||
+        '    from apex_applications@' || l_src_link || ' a' ||
+        '   where ' || l_app_filter ||
+        '), tgt_apps as (' ||
+        '  select a.application_id, a.application_name, a.workspace,' ||
+        '         (select count(*) from apex_application_pages@' || l_tgt_link ||
+        '           p where p.application_id = a.application_id) page_count' ||
+        '    from apex_applications@' || l_tgt_link || ' a' ||
+        '   where ' || l_app_filter ||
+        '), app_findings as (' ||
+        '  select ''APP ''||to_char(coalesce(src.application_id,tgt.application_id))||'' ''||' ||
+        '         coalesce(src.application_name,tgt.application_name) element,' ||
+        '         nvl(src.workspace||'' / Seiten ''||to_char(src.page_count), ''-'') quelle,' ||
+        '         nvl(tgt.workspace||'' / Seiten ''||to_char(tgt.page_count), ''-'') ziel,' ||
+        '         case when src.application_id is null then ''NUR_ZIEL''' ||
+        '              when tgt.application_id is null then ''NUR_QUELLE''' ||
+        '              else ''PAGE_COUNT_DIFF'' end status,' ||
+        '         case when src.application_id is null then ''App existiert nur im Ziel. Pruefen, ob erwartet.''' ||
+        '              when tgt.application_id is null then ''App fehlt im Ziel.''' ||
+        '              else ''Seitenanzahl weicht ab; fehlende Seiten unten pruefen.'' end info' ||
+        '    from src_apps src full outer join tgt_apps tgt' ||
+        '      on tgt.application_id = src.application_id' ||
+        '     and tgt.application_name = src.application_name' ||
+        '   where src.application_id is null' ||
+        '      or tgt.application_id is null' ||
+        '      or nvl(src.page_count,-1) <> nvl(tgt.page_count,-1)' ||
+        '), src_pages as (' ||
+        '  select a.application_id, a.application_name, p.page_id, p.page_name' ||
+        '    from src_apps a join apex_application_pages@' || l_src_link || ' p' ||
+        '      on p.application_id = a.application_id' ||
+        '   where exists (select 1 from tgt_apps t where t.application_id = a.application_id)' ||
+        '), tgt_pages as (' ||
+        '  select a.application_id, a.application_name, p.page_id, p.page_name' ||
+        '    from tgt_apps a join apex_application_pages@' || l_tgt_link || ' p' ||
+        '      on p.application_id = a.application_id' ||
+        '   where exists (select 1 from src_apps s where s.application_id = a.application_id)' ||
+        '), page_findings as (' ||
+        '  select ''APP ''||to_char(coalesce(src.application_id,tgt.application_id))||' ||
+        '         '' / PAGE ''||to_char(coalesce(src.page_id,tgt.page_id)) element,' ||
+        '         nvl(src.application_name||'' / ''||src.page_name, ''-'') quelle,' ||
+        '         nvl(tgt.application_name||'' / ''||tgt.page_name, ''-'') ziel,' ||
+        '         case when src.page_id is null then ''NUR_ZIEL_PAGE'' else ''NUR_QUELLE_PAGE'' end status,' ||
+        '         case when src.page_id is null then ''Seite existiert nur im Ziel.''' ||
+        '              else ''Seite fehlt im Ziel.'' end info' ||
+        '    from src_pages src full outer join tgt_pages tgt' ||
+        '      on tgt.application_id = src.application_id' ||
+        '     and tgt.page_id = src.page_id' ||
+        '   where src.page_id is null or tgt.page_id is null' ||
+        '), findings as (' ||
+        '  select * from app_findings' ||
+        '  union all' ||
+        '  select * from page_findings' ||
+        ')' ||
+        'select element, quelle, ziel, status, info from findings' ||
+        ' union all' ||
+        'select ''APEX Basisvergleich'', ''Apps + Seiten'', ''Apps + Seiten'', ''OK'',' ||
+        '       ''Keine App-/Seiten-Differenzen gefunden. Runtime, Plugins, JS/CSS und fachliche Tests bleiben manuell zu pruefen.''' ||
+        '  from dual where not exists (select 1 from findings)' ||
+        ' order by 4 desc, 1';
+    print_section(
+        'APEX-Kompatibilitaetsrisiken',
+        l_sql,
+        'Pruefpunkt',
+        'Quelle',
+        'Ziel',
+        'Risiko',
+        'Hinweis');
+
+    print_runtime_risks(l_src_link, l_tgt_link, l_app_filter);
 end;~',
         p_plug_display_condition_type => 'ITEM_IS_NOT_NULL',
         p_plug_display_when_condition => 'P9_COMPARE_OK');

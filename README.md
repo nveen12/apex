@@ -33,12 +33,18 @@ Page 10 is the launcher. Page 9 runs the comparison.
 The comparison uses DB links and compares:
 
 - object counts from `ALL_OBJECTS`
-- invalid objects from `ALL_OBJECTS`
-- forward changes using `LAST_DDL_TIME`
+- target invalid objects that are valid on source from `ALL_OBJECTS`
 - tablespace usage from `ALL_TABLES`
 - APEX apps/pages from `APEX_APPLICATIONS` and `APEX_APPLICATION_PAGES`
+- APEX compatibility risk indicators: missing apps, page-count differences, missing pages
+- APEX runtime risk indicators: auth differences, custom JS/CSS, plugins, REST/web sources,
+  external PL/SQL references, process-count differences, dynamic-action differences
 
 Rows with missing or placeholder DB links are hidden from the runnable dropdown and shown in the TODO report.
+
+The APEX compatibility/runtime sections are static metadata checks. They flag likely migration
+risks and tell the team where to test first. They cannot prove browser behavior, real external
+system connectivity, Jasper output, authentication success for real users, or functional correctness.
 
 ## Source Of Truth
 
