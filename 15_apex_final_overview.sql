@@ -201,18 +201,11 @@ begin
 
     wwv_flow_imp_page.create_page_plug(
         p_id                    => wwv_flow_imp.id(91500000000000001),
-        p_plug_name             => 'Final Navigation CSS',
+        p_plug_name             => 'Final Navigation Cleanup',
         p_plug_display_sequence => 1,
         p_plug_display_point    => 'BODY',
         p_plug_source_type      => 'NATIVE_STATIC',
         p_plug_source           => q'~<style>
-.t-TreeNav li:has(a[href*=":2:"]),
-.t-TreeNav li:has(a[href*=":3:"]),
-.t-TreeNav li:has(a[href*=":4:"]),
-.t-TreeNav li:has(a[href*=":5:"]),
-.t-TreeNav li:has(a[href*=":6:"]),
-.t-TreeNav li:has(a[href*=":7:"]),
-.t-TreeNav li:has(a[href*=":8:"]){display:none!important}
 .mt-overview-wrap{overflow:auto}
 .mt-overview-table{border-collapse:separate;border-spacing:0;width:100%;font-size:.84rem;border:1px solid #d0d7de;border-radius:6px;overflow:hidden}
 .mt-overview-table th{background:#f6f8fa;color:#172033;font-weight:700;border-bottom:1px solid #c9d1d9;padding:7px 9px;text-align:left;white-space:nowrap}
@@ -226,7 +219,36 @@ begin
 .mt-badge-warn{background:#fee2e2;color:#991b1b}
 .mt-link{color:#005ea8;text-decoration:none}
 .mt-link:hover{text-decoration:underline}
-</style>~',
+</style>
+<script>
+(function(){
+  function hideOldNavEntries(){
+    var hiddenTexts = {
+      "Home": true,
+      "Fachverfahren": true,
+      "Caesar Orders": true,
+      "Checkliste": true,
+      "Service Name Audit": true,
+      "Server Inventory": true
+    };
+    document.querySelectorAll(".t-TreeNav a, .t-Body-nav a, nav a").forEach(function(anchor){
+      var text = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+      var href = anchor.getAttribute("href") || "";
+      if (hiddenTexts[text] || /[:.]([2-8])[:.]/.test(href)) {
+        var row = anchor.closest("li");
+        if (row) {
+          row.style.display = "none";
+        } else {
+          anchor.style.display = "none";
+        }
+      }
+    });
+  }
+  hideOldNavEntries();
+  document.addEventListener("apexreadyend", hideOldNavEntries);
+  window.setTimeout(hideOldNavEntries, 300);
+})();
+</script>~',
         p_attributes            => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
             'expand_shortcuts', 'N',
             'output_as',        'HTML',
@@ -241,8 +263,19 @@ begin
         p_region_template_options => '#DEFAULT#:t-Region--scrollBody',
         p_plug_display_sequence   => 10,
         p_plug_display_point      => 'BODY',
-        p_query_type              => 'TABLE',
-        p_query_table             => 'MT_APEX_MIGRATION_OVERVIEW',
+        p_query_type              => 'SQL',
+        p_plug_source             => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'select overview_id,',
+            '       row_sort,',
+            '       umgebung,',
+            '       datenbank,',
+            '       quelle_host_db_pdb,',
+            '       ziel_host_db_pdb,',
+            '       service_name_ziel,',
+            '       apex_version,',
+            '       status,',
+            '       url',
+            'from   mt_apex_migration_overview')),
         p_include_rowid_column    => false,
         p_is_editable             => true,
         p_edit_operations         => 'i:u:d',

@@ -158,7 +158,36 @@ begin
         p_plug_template           => wwv_flow_imp.id(10818657374759767),
         p_plug_display_sequence   => 20,
         p_plug_display_point      => 'BODY',
-        p_plug_source             => '<style>.t-TreeNav li:has(a[href*=":2:"]),.t-TreeNav li:has(a[href*=":3:"]),.t-TreeNav li:has(a[href*=":4:"]),.t-TreeNav li:has(a[href*=":5:"]),.t-TreeNav li:has(a[href*=":6:"]),.t-TreeNav li:has(a[href*=":7:"]),.t-TreeNav li:has(a[href*=":8:"]){display:none!important}</style><button type="button" class="t-Button t-Button--hot" onclick="apex.submit(''OPEN_LIVE_VERGLEICH'');"><span class="t-Icon fa fa-search" aria-hidden="true"></span><span class="t-Button-label">Live Vergleich oeffnen</span></button>',
+        p_plug_source             => q'~<script>
+(function(){
+  function hideOldNavEntries(){
+    var hiddenTexts = {
+      "Home": true,
+      "Fachverfahren": true,
+      "Caesar Orders": true,
+      "Checkliste": true,
+      "Service Name Audit": true,
+      "Server Inventory": true
+    };
+    document.querySelectorAll(".t-TreeNav a, .t-Body-nav a, nav a").forEach(function(anchor){
+      var text = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+      var href = anchor.getAttribute("href") || "";
+      if (hiddenTexts[text] || /[:.]([2-8])[:.]/.test(href)) {
+        var row = anchor.closest("li");
+        if (row) {
+          row.style.display = "none";
+        } else {
+          anchor.style.display = "none";
+        }
+      }
+    });
+  }
+  hideOldNavEntries();
+  document.addEventListener("apexreadyend", hideOldNavEntries);
+  window.setTimeout(hideOldNavEntries, 300);
+})();
+</script>
+<button type="button" class="t-Button t-Button--hot" onclick="apex.submit('OPEN_LIVE_VERGLEICH');"><span class="t-Icon fa fa-search" aria-hidden="true"></span><span class="t-Button-label">Live Vergleich oeffnen</span></button>~',
         p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
             'expand_shortcuts', 'N',
             'output_as',        'HTML',
