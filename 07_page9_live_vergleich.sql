@@ -428,12 +428,12 @@ begin
             run_risk_query(
                 'select ''JS_CSS'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
                 '       p.page_name, ''PRUEFEN'',' ||
-                '       trim(both '', '' from' ||
+                '       rtrim(' ||
                 '            case when p.javascript_file_urls is not null then ''JS-Dateien, '' end ||' ||
                 '            case when p.javascript_code is not null then ''Inline-JS, '' end ||' ||
                 '            case when p.javascript_code_onload is not null then ''Onload-JS, '' end ||' ||
                 '            case when p.css_file_urls is not null then ''CSS-Dateien, '' end ||' ||
-                '            case when p.inline_css is not null then ''Inline-CSS, '' end)' ||
+                '            case when p.inline_css is not null then ''Inline-CSS, '' end, '', '')' ||
                 '  from apex_application_pages@' || p_tgt_link || ' p' ||
                 '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
                 ' where ' || p_app_filter ||
@@ -454,6 +454,7 @@ begin
                 '  join apex_applications@' || p_tgt_link || ' a on a.application_id = r.application_id' ||
                 ' where ' || p_app_filter ||
                 '   and r.source_type_plugin_name is not null' ||
+                '   and r.source_type_plugin_name not like ''NATIVE\_%'' escape ''\''' ||
                 ' union all' ||
                 ' select ''PLUGIN_USED'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
                 '       p.process_name, ''WARNUNG'', ''Process Plugin: ''||p.process_type_plugin_name' ||
@@ -461,6 +462,7 @@ begin
                 '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
                 ' where ' || p_app_filter ||
                 '   and p.process_type_plugin_name is not null' ||
+                '   and p.process_type_plugin_name not like ''NATIVE\_%'' escape ''\''' ||
                 ' order by 2, 3');
         else
             l_skipped := l_skipped + 1;
@@ -784,12 +786,13 @@ begin
         '  union all' ||
         '  select * from page_findings' ||
         ')' ||
-        'select element, quelle, ziel, status, info from findings' ||
-        ' union all' ||
-        'select ''APEX Basisvergleich'', ''Apps + Seiten'', ''Apps + Seiten'', ''OK'',' ||
-        '       ''Keine App-/Seiten-Differenzen gefunden. Runtime, Plugins, JS/CSS und fachliche Tests bleiben manuell zu pruefen.''' ||
-        '  from dual where not exists (select 1 from findings)' ||
-        ' order by 4 desc, 1';
+        'select * from (' ||
+        '  select element, quelle, ziel, status, info from findings' ||
+        '  union all' ||
+        '  select ''APEX Basisvergleich'', ''Apps + Seiten'', ''Apps + Seiten'', ''OK'',' ||
+        '         ''Keine App-/Seiten-Differenzen gefunden. Runtime, Plugins, JS/CSS und fachliche Tests bleiben manuell zu pruefen.''' ||
+        '    from dual where not exists (select 1 from findings)' ||
+        ') order by status desc, element';
     print_section(
         'APEX-Kompatibilitaetsrisiken',
         l_sql,
