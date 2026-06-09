@@ -406,23 +406,6 @@ begin
         'Hinweis');
 
     l_sql :=
-        'select owner||''.''||object_name, object_type, status,' ||
-        '       to_char(last_ddl_time,''DD.MM.YYYY HH24:MI''), ''Quelle nach Referenzdatum geaendert''' ||
-        '  from all_objects@' || l_src_link ||
-        ' where ' || l_src_filter ||
-        '   and last_ddl_time > to_date(''' || :P9_MIGRATION_DATE || ''',''YYYY-MM-DD'')' ||
-        '   and object_name not like ''BIN$%''' ||
-        ' order by last_ddl_time desc';
-    print_section(
-        'Forward Changes auf Quelle',
-        l_sql,
-        'Objekt',
-        'Objekttyp',
-        'Objektstatus',
-        'Geaendert am',
-        'Hinweis');
-
-    l_sql :=
         'with src as (' ||
         '  select nvl(tablespace_name,''<NULL>'') element, count(*) cnt' ||
         '  from all_tables@' || l_src_link || ' where ' || l_src_filter ||
