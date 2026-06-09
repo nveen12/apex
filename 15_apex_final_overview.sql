@@ -59,7 +59,14 @@ begin
 end;
 /
 
-delete from mt_apex_migration_overview;
+declare
+    l_seed_count number;
+begin
+    select count(*)
+    into   l_seed_count
+    from   mt_apex_migration_overview;
+
+    if l_seed_count = 0 then
 
 insert into mt_apex_migration_overview (
     row_sort, umgebung, datenbank, quelle_host_db_pdb, ziel_host_db_pdb,
@@ -148,7 +155,10 @@ insert into mt_apex_migration_overview values (
     q'[GG.ENTW]', q'[24.1 + VALIDIERT?]', q'[MIGRIERT]', q'[https://rzhs440.ofd-h.de:9092/ords]'
 );
 
-commit;
+        commit;
+    end if;
+end;
+/
 
 declare
     l_workspace_id number;
@@ -220,6 +230,11 @@ begin
 .mt-badge-warn{background:#fee2e2;color:#991b1b}
 .mt-link{color:#005ea8;text-decoration:none}
 .mt-link:hover{text-decoration:underline}
+.mt-toolbar{display:flex;justify-content:flex-end;margin:0 0 .75rem 0}
+.mt-button{display:inline-flex;align-items:center;gap:.35rem;background:#0572ce;color:#fff!important;
+    border-radius:3px;padding:6px 10px;text-decoration:none;font-weight:600}
+.mt-action{font-weight:700;color:#005ea8;text-decoration:none}
+.mt-action:hover{text-decoration:underline}
 </style>
 <script>
 (function(){
@@ -305,8 +320,13 @@ begin
     end;
 begin
     htp.p('<div class="mt-overview-wrap">');
+    htp.p('<div class="mt-toolbar"><a class="mt-button" href="' ||
+          apex_escape.html_attribute(apex_util.prepare_url(
+              'f?p=' || v('APP_ID') || ':11:' || v('APP_SESSION') || '::NO:11::')) ||
+          '">Add Row</a></div>');
     htp.p('<table class="mt-overview-table">');
     htp.p('<thead><tr>' ||
+          '<th>Aktion</th>' ||
           '<th>Umgebung</th>' ||
           '<th>Datenbank</th>' ||
           '<th>Quelle (Host_DB_PDB)</th>' ||
@@ -318,7 +338,8 @@ begin
           '</tr></thead><tbody>');
 
     for r in (
-        select umgebung,
+        select overview_id,
+               umgebung,
                datenbank,
                quelle_host_db_pdb,
                ziel_host_db_pdb,
@@ -331,6 +352,11 @@ begin
     ) loop
         l_rows := l_rows + 1;
         htp.p('<tr>' ||
+              '<td><a class="mt-action" href="' ||
+              apex_escape.html_attribute(apex_util.prepare_url(
+                  'f?p=' || v('APP_ID') || ':11:' || v('APP_SESSION') ||
+                  '::NO:11:P11_OVERVIEW_ID:' || r.overview_id)) ||
+              '">Edit</a></td>' ||
               '<td>' || esc(r.umgebung) || '</td>' ||
               '<td>' || esc(r.datenbank) || '</td>' ||
               '<td>' || esc(r.quelle_host_db_pdb) || '</td>' ||
@@ -349,7 +375,7 @@ begin
     end loop;
 
     if l_rows = 0 then
-        htp.p('<tr><td colspan="8">Keine Eintraege gefunden.</td></tr>');
+        htp.p('<tr><td colspan="9">Keine Eintraege gefunden.</td></tr>');
     end if;
 
     htp.p('</tbody></table></div>');
@@ -678,6 +704,248 @@ end;~',
         p_attribute_08           => 'Y',
         p_error_display_location => 'INLINE_IN_NOTIFICATION',
         p_internal_uid           => 91500000000000060);
+
+    -- Hidden/internal edit page for APEX Migration Uebersicht rows.
+    -- Page 1 uses a stable PL/SQL-rendered table; this page performs edits
+    -- against the backing table without relying on Interactive Grid rendering.
+    begin
+        wwv_flow_imp_page.remove_page(p_flow_id => l_app_id, p_page_id => 11);
+    exception
+        when others then
+            null;
+    end;
+
+    wwv_flow_imp_page.create_page(
+        p_id                    => 11,
+        p_name                  => 'APEX Migration Eintrag bearbeiten',
+        p_alias                 => 'APEX-MIGRATION-EINTRAG-BEARBEITEN',
+        p_step_title            => 'APEX Migration Eintrag bearbeiten',
+        p_autocomplete_on_off   => 'OFF',
+        p_page_template_options => '#DEFAULT#',
+        p_protection_level      => 'C',
+        p_page_component_map    => '16');
+
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(91500000000001100),
+        p_plug_name               => 'Eintrag',
+        p_title                   => 'Eintrag',
+        p_plug_template           => wwv_flow_imp.id(10818657374759767),
+        p_region_template_options => '#DEFAULT#:t-Region--scrollBody',
+        p_plug_display_sequence   => 10,
+        p_plug_display_point      => 'BODY',
+        p_plug_source_type        => 'NATIVE_STATIC',
+        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'HTML',
+            'show_line_breaks', 'N')).to_clob);
+
+    wwv_flow_imp_page.create_page_button(
+        p_id                      => wwv_flow_imp.id(91500000000001101),
+        p_button_sequence         => 10,
+        p_button_plug_id          => wwv_flow_imp.id(91500000000001100),
+        p_button_name             => 'CANCEL',
+        p_button_action           => 'REDIRECT_URL',
+        p_button_template_id      => wwv_flow_imp.id(10892289891759782),
+        p_button_template_options => '#DEFAULT#',
+        p_button_image_alt        => 'Abbrechen',
+        p_button_position         => 'BELOW_BOX',
+        p_button_alignment        => 'LEFT',
+        p_button_redirect_url     => 'f?p=&APP_ID.:1:&APP_SESSION.::&DEBUG.:::');
+
+    wwv_flow_imp_page.create_page_button(
+        p_id                      => wwv_flow_imp.id(91500000000001102),
+        p_button_sequence         => 20,
+        p_button_plug_id          => wwv_flow_imp.id(91500000000001100),
+        p_button_name             => 'DELETE',
+        p_button_action           => 'SUBMIT',
+        p_button_template_id      => wwv_flow_imp.id(10892289891759782),
+        p_button_template_options => '#DEFAULT#',
+        p_button_image_alt        => 'Loeschen',
+        p_button_position         => 'BELOW_BOX',
+        p_button_alignment        => 'RIGHT',
+        p_confirm_message         => 'Diesen Eintrag wirklich loeschen?',
+        p_button_condition        => 'P11_OVERVIEW_ID',
+        p_button_condition_type   => 'ITEM_IS_NOT_NULL');
+
+    wwv_flow_imp_page.create_page_button(
+        p_id                      => wwv_flow_imp.id(91500000000001103),
+        p_button_sequence         => 30,
+        p_button_plug_id          => wwv_flow_imp.id(91500000000001100),
+        p_button_name             => 'SAVE',
+        p_button_action           => 'SUBMIT',
+        p_button_template_id      => wwv_flow_imp.id(10892289891759782),
+        p_button_template_options => '#DEFAULT#',
+        p_button_is_hot           => 'Y',
+        p_button_image_alt        => 'Speichern',
+        p_button_position         => 'BELOW_BOX',
+        p_button_alignment        => 'RIGHT');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(91500000000001110),
+        p_name             => 'P11_OVERVIEW_ID',
+        p_item_sequence    => 10,
+        p_item_plug_id     => wwv_flow_imp.id(91500000000001100),
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001111),
+        p_name          => 'P11_ROW_SORT',
+        p_item_sequence => 20,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'Sort',
+        p_display_as    => 'NATIVE_NUMBER_FIELD',
+        p_csize         => 10);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001112),
+        p_name          => 'P11_UMGEBUNG',
+        p_item_sequence => 30,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'Umgebung',
+        p_display_as    => 'NATIVE_TEXT_FIELD',
+        p_csize         => 40,
+        p_cmaxlength    => 100);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001113),
+        p_name          => 'P11_DATENBANK',
+        p_item_sequence => 40,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'Datenbank',
+        p_display_as    => 'NATIVE_TEXT_FIELD',
+        p_csize         => 60,
+        p_cmaxlength    => 200);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001114),
+        p_name          => 'P11_QUELLE_HOST_DB_PDB',
+        p_item_sequence => 50,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'Quelle (Host_DB_PDB)',
+        p_display_as    => 'NATIVE_TEXTAREA',
+        p_csize         => 100,
+        p_cmaxlength    => 1000,
+        p_cheight       => 2);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001115),
+        p_name          => 'P11_ZIEL_HOST_DB_PDB',
+        p_item_sequence => 60,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'Ziel (Host_DB_PDB)',
+        p_display_as    => 'NATIVE_TEXTAREA',
+        p_csize         => 100,
+        p_cmaxlength    => 1000,
+        p_cheight       => 2);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001116),
+        p_name          => 'P11_SERVICE_NAME_ZIEL',
+        p_item_sequence => 70,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'Service_Name (Ziel)',
+        p_display_as    => 'NATIVE_TEXT_FIELD',
+        p_csize         => 60,
+        p_cmaxlength    => 200);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001117),
+        p_name          => 'P11_APEX_VERSION',
+        p_item_sequence => 80,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'APEX Version',
+        p_display_as    => 'NATIVE_TEXT_FIELD',
+        p_csize         => 60,
+        p_cmaxlength    => 200);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001118),
+        p_name          => 'P11_STATUS',
+        p_item_sequence => 90,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'Status',
+        p_display_as    => 'NATIVE_TEXT_FIELD',
+        p_csize         => 40,
+        p_cmaxlength    => 100);
+
+    wwv_flow_imp_page.create_page_item(
+        p_id            => wwv_flow_imp.id(91500000000001119),
+        p_name          => 'P11_URL',
+        p_item_sequence => 100,
+        p_item_plug_id  => wwv_flow_imp.id(91500000000001100),
+        p_prompt        => 'URL',
+        p_display_as    => 'NATIVE_TEXTAREA',
+        p_csize         => 100,
+        p_cmaxlength    => 1000,
+        p_cheight       => 2);
+
+    wwv_flow_imp_page.create_page_process(
+        p_id                     => wwv_flow_imp.id(91500000000001130),
+        p_process_sequence       => 10,
+        p_process_point          => 'BEFORE_HEADER',
+        p_process_type           => 'NATIVE_PLSQL',
+        p_process_name           => 'Eintrag laden',
+        p_process_sql_clob       => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'begin',
+            '    if :P11_OVERVIEW_ID is not null then',
+            '        select row_sort, umgebung, datenbank, quelle_host_db_pdb,',
+            '               ziel_host_db_pdb, service_name_ziel, apex_version, status, url',
+            '        into   :P11_ROW_SORT, :P11_UMGEBUNG, :P11_DATENBANK, :P11_QUELLE_HOST_DB_PDB,',
+            '               :P11_ZIEL_HOST_DB_PDB, :P11_SERVICE_NAME_ZIEL, :P11_APEX_VERSION, :P11_STATUS, :P11_URL',
+            '        from   mt_apex_migration_overview',
+            '        where  overview_id = :P11_OVERVIEW_ID;',
+            '    end if;',
+            'exception',
+            '    when no_data_found then',
+            '        :P11_OVERVIEW_ID := null;',
+            'end;')),
+        p_error_display_location => 'INLINE_IN_NOTIFICATION',
+        p_internal_uid           => 91500000000001130);
+
+    wwv_flow_imp_page.create_page_process(
+        p_id                     => wwv_flow_imp.id(91500000000001131),
+        p_process_sequence       => 20,
+        p_process_point          => 'AFTER_SUBMIT',
+        p_process_type           => 'NATIVE_PLSQL',
+        p_process_name           => 'Eintrag speichern oder loeschen',
+        p_process_sql_clob       => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'begin',
+            '    if apex_application.g_request = ''DELETE'' and :P11_OVERVIEW_ID is not null then',
+            '        delete from mt_apex_migration_overview',
+            '        where overview_id = :P11_OVERVIEW_ID;',
+            '    elsif apex_application.g_request = ''SAVE'' then',
+            '        if :P11_OVERVIEW_ID is null then',
+            '            insert into mt_apex_migration_overview (',
+            '                row_sort, umgebung, datenbank, quelle_host_db_pdb,',
+            '                ziel_host_db_pdb, service_name_ziel, apex_version, status, url)',
+            '            values (',
+            '                :P11_ROW_SORT, :P11_UMGEBUNG, :P11_DATENBANK, :P11_QUELLE_HOST_DB_PDB,',
+            '                :P11_ZIEL_HOST_DB_PDB, :P11_SERVICE_NAME_ZIEL, :P11_APEX_VERSION, :P11_STATUS, :P11_URL);',
+            '        else',
+            '            update mt_apex_migration_overview',
+            '            set    row_sort           = :P11_ROW_SORT,',
+            '                   umgebung           = :P11_UMGEBUNG,',
+            '                   datenbank          = :P11_DATENBANK,',
+            '                   quelle_host_db_pdb = :P11_QUELLE_HOST_DB_PDB,',
+            '                   ziel_host_db_pdb   = :P11_ZIEL_HOST_DB_PDB,',
+            '                   service_name_ziel  = :P11_SERVICE_NAME_ZIEL,',
+            '                   apex_version       = :P11_APEX_VERSION,',
+            '                   status             = :P11_STATUS,',
+            '                   url                = :P11_URL',
+            '            where  overview_id        = :P11_OVERVIEW_ID;',
+            '        end if;',
+            '    end if;',
+            '',
+            '    commit;',
+            '    apex_util.redirect_url(''f?p='' || v(''APP_ID'') || '':1:'' || v(''APP_SESSION'') || ''::NO:::'' );',
+            'end;')),
+        p_process_when            => 'SAVE,DELETE',
+        p_process_when_type       => 'REQUEST_IN_CONDITION',
+        p_error_display_location  => 'INLINE_IN_NOTIFICATION',
+        p_process_success_message => 'Eintrag gespeichert.',
+        p_internal_uid            => 91500000000001131);
 
     -- Remove old visible pages. Page 9 is intentionally kept as detail page.
     for p in 2 .. 8 loop
