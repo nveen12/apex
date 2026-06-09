@@ -158,7 +158,7 @@ begin
         p_plug_template           => wwv_flow_imp.id(10818657374759767),
         p_plug_display_sequence   => 20,
         p_plug_display_point      => 'BODY',
-        p_plug_source             => '<button type="button" class="t-Button t-Button--hot" onclick="apex.submit(''OPEN_LIVE_VERGLEICH'');"><span class="t-Icon fa fa-search" aria-hidden="true"></span><span class="t-Button-label">Live Vergleich oeffnen</span></button>',
+        p_plug_source             => '<style>.t-TreeNav li:has(a[href*=":2:"]),.t-TreeNav li:has(a[href*=":3:"]),.t-TreeNav li:has(a[href*=":4:"]),.t-TreeNav li:has(a[href*=":5:"]),.t-TreeNav li:has(a[href*=":6:"]),.t-TreeNav li:has(a[href*=":7:"]),.t-TreeNav li:has(a[href*=":8:"]){display:none!important}</style><button type="button" class="t-Button t-Button--hot" onclick="apex.submit(''OPEN_LIVE_VERGLEICH'');"><span class="t-Icon fa fa-search" aria-hidden="true"></span><span class="t-Button-label">Live Vergleich oeffnen</span></button>',
         p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
             'expand_shortcuts', 'N',
             'output_as',        'HTML',

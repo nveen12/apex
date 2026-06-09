@@ -21,6 +21,7 @@ Run as `MIGRATION`:
 @12_create_rzhs440_dblinks.sql
 @07_page9_live_vergleich.sql
 @10_live_vergleich_start.sql
+@15_apex_final_overview.sql
 @13_verify_live_vergleich.sql
 ```
 
@@ -28,7 +29,15 @@ Run as `MIGRATION`:
 
 ## Live Vergleich
 
-Page 10 is the launcher. Page 9 runs the comparison.
+The visible app is intentionally small:
+
+- Page 1: `APEX Migration Übersicht`
+- Page 10: `Live Vergleich`
+
+Page 9 remains as the hidden/detail page that runs the comparison after Page 10 starts it.
+Old operational pages 2-8 are removed by `15_apex_final_overview.sql`.
+The overview rows are stored in `MT_APEX_MIGRATION_OVERVIEW` and Page 1 is an editable
+Interactive Grid, so rows can be added or changed directly in APEX.
 
 The comparison uses DB links and compares:
 
@@ -38,13 +47,15 @@ The comparison uses DB links and compares:
 - APEX apps/pages from `APEX_APPLICATIONS` and `APEX_APPLICATION_PAGES`
 - APEX compatibility risk indicators: missing apps, page-count differences, missing pages
 - APEX runtime risk indicators: auth differences, custom JS/CSS, plugins, REST/web sources,
-  external PL/SQL references, process-count differences, dynamic-action differences
+  process-count differences, dynamic-action differences
 
 Rows with missing or placeholder DB links are hidden from the runnable dropdown and shown in the TODO report.
 
 The APEX compatibility/runtime sections are static metadata checks. They flag likely migration
 risks and tell the team where to test first. They cannot prove browser behavior, real external
 system connectivity, Jasper output, authentication success for real users, or functional correctness.
+PL/SQL source text scanning for Jasper/URL references is not done in the live DB-link page because
+remote APEX dictionary source columns can be CLOBs and may raise LOB-over-DB-link errors.
 
 ## Source Of Truth
 
