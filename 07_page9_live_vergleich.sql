@@ -221,7 +221,12 @@ begin
 
     procedure print_section(
         p_title in varchar2,
-        p_sql   in varchar2
+        p_sql   in varchar2,
+        p_col1  in varchar2 default 'Element',
+        p_col2  in varchar2 default 'Quelle',
+        p_col3  in varchar2 default 'Ziel',
+        p_col4  in varchar2 default 'Status',
+        p_col5  in varchar2 default 'Info'
     ) is
         c       integer;
         rc      integer;
@@ -232,9 +237,21 @@ begin
         v4      varchar2(4000);
         v5      varchar2(4000);
     begin
+        htp.p('<style>
+            .mt-live-section{margin:1rem 0 2rem 0}
+            .mt-live-table{border-collapse:collapse;min-width:720px;max-width:100%}
+            .mt-live-table th,.mt-live-table td{border:1px solid #d8d8d8;padding:4px 7px;vertical-align:top}
+            .mt-live-table th{background:#f4f4f4;font-weight:600}
+            .mt-status-ok{color:#166534;font-weight:600}
+            .mt-status-diff,.mt-status-invalid,.mt-status-fehler{color:#b42318;font-weight:600}
+            .mt-muted{color:#666}
+        </style>');
+        htp.p('<div class="mt-live-section">');
         htp.p('<h3>' || esc(p_title) || '</h3>');
         htp.p('<table class="t-Report-report"><thead><tr>' ||
-              '<th>Element</th><th>Quelle</th><th>Ziel</th><th>Status</th><th>Info</th>' ||
+              '<th>' || esc(p_col1) || '</th><th>' || esc(p_col2) ||
+              '</th><th>' || esc(p_col3) || '</th><th>' || esc(p_col4) ||
+              '</th><th>' || esc(p_col5) || '</th>' ||
               '</tr></thead><tbody>');
 
         c := dbms_sql.open_cursor;
@@ -256,7 +273,8 @@ begin
             l_rows := l_rows + 1;
 
             htp.p('<tr><td>' || esc(v1) || '</td><td>' || esc(v2) ||
-                  '</td><td>' || esc(v3) || '</td><td>' || esc(v4) ||
+                  '</td><td>' || esc(v3) || '</td><td class="mt-status-' ||
+                  lower(replace(nvl(v4, 'info'), '_', '-')) || '">' || esc(v4) ||
                   '</td><td>' || esc(v5) || '</td></tr>');
         end loop;
 
@@ -268,7 +286,7 @@ begin
             htp.p('<tr><td colspan="5">Ausgabe auf 200 Zeilen begrenzt.</td></tr>');
         end if;
 
-        htp.p('</tbody></table>');
+        htp.p('</tbody></table></div>');
     exception
         when others then
             if dbms_sql.is_open(c) then
@@ -325,7 +343,14 @@ begin
         '         null' ||
         '  from src full outer join tgt on tgt.element=src.element' ||
         '  order by 1';
-    print_section('Objektanzahl nach Schema und Typ', l_sql);
+    print_section(
+        'Objektanzahl nach Schema und Typ',
+        l_sql,
+        'Schema.Objekttyp',
+        'Quelle Anzahl',
+        'Ziel Anzahl',
+        'Ergebnis',
+        'Hinweis');
 
     l_sql :=
         'select ''QUELLE: ''||owner||''.''||object_name, object_type, status,' ||
@@ -338,7 +363,14 @@ begin
         '  from all_objects@' || l_tgt_link ||
         ' where ' || l_filter || ' and status <> ''VALID'' and object_name not like ''BIN$%''' ||
         ' order by 1';
-    print_section('Ungueltige Objekte', l_sql);
+    print_section(
+        'Ungueltige Objekte',
+        l_sql,
+        'Seite / Objekt',
+        'Objekttyp',
+        'Objektstatus',
+        'Letzte Aenderung',
+        'Hinweis');
 
     l_sql :=
         'select owner||''.''||object_name, object_type, status,' ||
@@ -348,7 +380,14 @@ begin
         '   and last_ddl_time > to_date(''' || :P9_MIGRATION_DATE || ''',''YYYY-MM-DD'')' ||
         '   and object_name not like ''BIN$%''' ||
         ' order by last_ddl_time desc';
-    print_section('Forward Changes auf Quelle', l_sql);
+    print_section(
+        'Forward Changes auf Quelle',
+        l_sql,
+        'Objekt',
+        'Objekttyp',
+        'Objektstatus',
+        'Geaendert am',
+        'Hinweis');
 
     l_sql :=
         'with src as (' ||
@@ -365,7 +404,14 @@ begin
         '         null' ||
         '  from src full outer join tgt on tgt.element=src.element' ||
         '  order by 1';
-    print_section('Tablespace-Vergleich', l_sql);
+    print_section(
+        'Tablespace-Vergleich',
+        l_sql,
+        'Tablespace',
+        'Tabellen Quelle',
+        'Tabellen Ziel',
+        'Ergebnis',
+        'Hinweis');
 
     l_sql :=
         'with src as (' ||
@@ -391,7 +437,14 @@ begin
         '  from src full outer join tgt on tgt.application_id=src.application_id' ||
         '                            and tgt.application_name=src.application_name' ||
         '  order by 1';
-    print_section('APEX-Anwendungen', l_sql);
+    print_section(
+        'APEX-Anwendungen',
+        l_sql,
+        'APEX App',
+        'Quelle Workspace / Seiten',
+        'Ziel Workspace / Seiten',
+        'Ergebnis',
+        'Hinweis');
 end;~',
         p_plug_display_condition_type => 'ITEM_IS_NOT_NULL',
         p_plug_display_when_condition => 'P9_COMPARE_OK');
