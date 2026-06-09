@@ -261,8 +261,9 @@ begin
         p_plug_template           => wwv_flow_imp.id(10818657374759767),
         p_region_css_classes      => 'mt-overview',
         p_region_template_options => '#DEFAULT#:t-Region--scrollBody',
-        p_plug_display_sequence   => 10,
+        p_plug_display_sequence   => 999,
         p_plug_display_point      => 'BODY',
+        p_plug_display_condition_type => 'NEVER',
         p_query_type              => 'SQL',
         p_plug_source             => wwv_flow_string.join(wwv_flow_t_varchar2(
             'select overview_id,',
@@ -281,6 +282,31 @@ begin
         p_edit_operations         => 'i:u:d',
         p_lost_update_check_type  => 'VALUES',
         p_plug_source_type        => 'NATIVE_IG');
+
+    wwv_flow_imp_page.create_report_region(
+        p_id                         => wwv_flow_imp.id(91500000000000110),
+        p_name                       => 'APEX Migration ' || unistr('\00DC') || 'bersicht Report',
+        p_title                      => 'APEX Migration ' || unistr('\00DC') || 'bersicht',
+        p_template                   => wwv_flow_imp.id(10818657374759767),
+        p_display_sequence           => 10,
+        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
+        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
+        p_display_point              => 'BODY',
+        p_source_type                => 'NATIVE_SQL_REPORT',
+        p_query_type                 => 'SQL',
+        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
+            'select umgebung             as "Umgebung",',
+            '       datenbank            as "Datenbank",',
+            '       quelle_host_db_pdb   as "Quelle (Host_DB_PDB)",',
+            '       ziel_host_db_pdb     as "Ziel (Host_DB_PDB)",',
+            '       service_name_ziel    as "Service_Name (Ziel)",',
+            '       apex_version         as "APEX Version",',
+            '       status               as "Status",',
+            '       case',
+            '         when url is not null then ''<a href="'' || apex_escape.html_attribute(url) || ''" target="_blank">'' || apex_escape.html(url) || ''</a>''',
+            '       end                  as "URL"',
+            'from   mt_apex_migration_overview',
+            'order  by row_sort')));
 
     wwv_flow_imp_page.create_region_column(
         p_id                      => wwv_flow_imp.id(91500000000000011),
@@ -578,6 +604,41 @@ begin
     for p in 2 .. 8 loop
         begin
             wwv_flow_imp_page.remove_page(p_flow_id => l_app_id, p_page_id => p);
+        exception
+            when others then
+                null;
+        end;
+    end loop;
+
+    -- Hide stale imported navigation entries for removed pages.
+    -- wwv_flow_imp_shared has no delete API for list items, but importing the
+    -- same item id with ITEM_DISPLAYED = N updates the item cleanly.
+    for r in (
+        select list_entry_id, entry_text, entry_target, display_sequence
+        from   apex_application_list_entries
+        where  application_id = l_app_id
+        and    list_name = 'Navigation Menu'
+        and    (
+                  entry_text in ('Home',
+                                 'Fachverfahren',
+                                 'Caesar Orders',
+                                 'Checkliste',
+                                 'Service Name Audit',
+                                 'Server Inventory')
+               or regexp_like(entry_target, '[:.]([2-8])[:.]')
+               )
+    ) loop
+        begin
+            wwv_flow_imp_shared.create_list_item(
+                p_id                         => r.list_entry_id,
+                p_list_id                    => l_nav_list_id,
+                p_list_item_type             => 'LINK',
+                p_list_item_status           => 'PUBLIC',
+                p_item_displayed             => 'N',
+                p_list_item_display_sequence => nvl(r.display_sequence, 900),
+                p_list_item_link_text        => r.entry_text,
+                p_list_item_link_target      => r.entry_target,
+                p_list_item_current_type     => 'TARGET_PAGE');
         exception
             when others then
                 null;
