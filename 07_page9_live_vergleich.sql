@@ -238,17 +238,27 @@ begin
         v5      varchar2(4000);
     begin
         htp.p('<style>
-            .mt-live-section{margin:1rem 0 2rem 0}
-            .mt-live-table{border-collapse:collapse;min-width:720px;max-width:100%}
-            .mt-live-table th,.mt-live-table td{border:1px solid #d8d8d8;padding:4px 7px;vertical-align:top}
-            .mt-live-table th{background:#f4f4f4;font-weight:600}
-            .mt-status-ok{color:#166534;font-weight:600}
-            .mt-status-diff,.mt-status-invalid,.mt-status-fehler{color:#b42318;font-weight:600}
+            .mt-live-section{margin:1rem 0 2rem 0;max-width:1180px}
+            .mt-live-section h3{margin:.25rem 0 .65rem 0;font-size:1.15rem}
+            .mt-live-table{border-collapse:separate;border-spacing:0;width:100%;
+                table-layout:auto;border:1px solid #d0d7de;border-radius:6px;overflow:hidden;
+                background:#fff;font-size:.875rem}
+            .mt-live-table th,.mt-live-table td{border-bottom:1px solid #d8dee4;
+                padding:6px 9px;vertical-align:top;line-height:1.35;white-space:nowrap}
+            .mt-live-table th{background:#f6f8fa;color:#24292f;font-weight:600;
+                position:sticky;top:0;z-index:1}
+            .mt-live-table tbody tr:nth-child(even){background:#f8fafc}
+            .mt-live-table tbody tr:hover{background:#eef6ff}
+            .mt-live-table tr:last-child td{border-bottom:0}
+            .mt-live-table td:first-child{font-family:Consolas,''Courier New'',monospace}
+            .mt-status-ok{color:#166534;font-weight:700}
+            .mt-status-diff,.mt-status-invalid,.mt-status-fehler,.mt-status-nur-quelle,.mt-status-nur-ziel{color:#b42318;font-weight:700}
+            .mt-status-info{color:#475569;font-weight:600}
             .mt-muted{color:#666}
         </style>');
         htp.p('<div class="mt-live-section">');
         htp.p('<h3>' || esc(p_title) || '</h3>');
-        htp.p('<table class="t-Report-report"><thead><tr>' ||
+        htp.p('<table class="mt-live-table"><thead><tr>' ||
               '<th>' || esc(p_col1) || '</th><th>' || esc(p_col2) ||
               '</th><th>' || esc(p_col3) || '</th><th>' || esc(p_col4) ||
               '</th><th>' || esc(p_col5) || '</th>' ||
@@ -281,9 +291,9 @@ begin
         dbms_sql.close_cursor(c);
 
         if l_rows = 0 then
-            htp.p('<tr><td colspan="5">Keine Daten gefunden.</td></tr>');
+            htp.p('<tr><td colspan="5" class="mt-muted">Keine Daten gefunden.</td></tr>');
         elsif l_rows >= 200 then
-            htp.p('<tr><td colspan="5">Ausgabe auf 200 Zeilen begrenzt.</td></tr>');
+            htp.p('<tr><td colspan="5" class="mt-muted">Ausgabe auf 200 Zeilen begrenzt.</td></tr>');
         end if;
 
         htp.p('</tbody></table></div>');
@@ -353,23 +363,36 @@ begin
         'Hinweis');
 
     l_sql :=
-        'select ''QUELLE: ''||owner||''.''||object_name, object_type, status,' ||
-        '       to_char(last_ddl_time,''DD.MM.YYYY HH24:MI''), null' ||
+        'with src as (' ||
+        '  select owner, object_name, object_type, status, last_ddl_time' ||
         '  from all_objects@' || l_src_link ||
-        ' where ' || l_filter || ' and status <> ''VALID'' and object_name not like ''BIN$%''' ||
-        ' union all ' ||
-        'select ''ZIEL: ''||owner||''.''||object_name, object_type, status,' ||
-        '       to_char(last_ddl_time,''DD.MM.YYYY HH24:MI''), null' ||
+        '  where ' || l_filter ||
+        '  and object_name not like ''BIN$%''' ||
+        '), tgt as (' ||
+        '  select owner, object_name, object_type, status, last_ddl_time' ||
         '  from all_objects@' || l_tgt_link ||
-        ' where ' || l_filter || ' and status <> ''VALID'' and object_name not like ''BIN$%''' ||
-        ' order by 1';
+        '  where ' || l_filter ||
+        '  and object_name not like ''BIN$%''' ||
+        ')' ||
+        'select tgt.owner||''.''||tgt.object_name,' ||
+        '       tgt.object_type,' ||
+        '       src.status,' ||
+        '       tgt.status,' ||
+        '       ''Quelle valid, Ziel invalid / Ziel geaendert: '' || to_char(tgt.last_ddl_time,''DD.MM.YYYY HH24:MI'')' ||
+        '  from tgt' ||
+        '  join src on src.owner = tgt.owner' ||
+        '          and src.object_name = tgt.object_name' ||
+        '          and src.object_type = tgt.object_type' ||
+        ' where src.status = ''VALID''' ||
+        '   and tgt.status <> ''VALID''' ||
+        ' order by tgt.owner, tgt.object_type, tgt.object_name';
     print_section(
-        'Ungueltige Objekte',
+        'Ziel ungueltig, Quelle gueltig',
         l_sql,
-        'Seite / Objekt',
+        'Ziel Objekt',
         'Objekttyp',
-        'Objektstatus',
-        'Letzte Aenderung',
+        'Quelle Status',
+        'Ziel Status',
         'Hinweis');
 
     l_sql :=
