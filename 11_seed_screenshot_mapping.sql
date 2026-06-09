@@ -234,6 +234,7 @@ declare
         l_count  number;
         l_id     number;
         l_rolle_cols number;
+        l_aktiv_cols number;
     begin
         select fv_id into l_fv_id
         from   mt_fachverfahren
@@ -275,6 +276,22 @@ declare
                 ) values (
                     l_id, l_fv_id, l_pdb_id, p_role
                 );
+            end if;
+        else
+            select count(*) into l_aktiv_cols
+            from   all_tab_columns
+            where  owner       = sys_context('USERENV', 'CURRENT_SCHEMA')
+            and    table_name  = 'MT_FV_PDB_MAPPING'
+            and    column_name = 'AKTIV';
+
+            if l_aktiv_cols > 0 then
+                execute immediate
+                    'update mt_fv_pdb_mapping
+                     set    aktiv = ''J''
+                     where  fv_id = :1
+                     and    pdb_id = :2
+                     and    mapping_role = :3'
+                    using l_fv_id, l_pdb_id, p_role;
             end if;
         end if;
     end;
@@ -320,8 +337,8 @@ begin
                join   mt_server s  on s.server_id = c.server_id
                where  fv.fv_id = m.fv_id
                and    (
-                         (fv.fv_kuerzel = 'SUPPORTFR' and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs441')
-                      or (fv.fv_kuerzel = 'PINGO'     and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs442')
+                         (fv.fv_kuerzel = 'SUPPORTFR' and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs440')
+                      or (fv.fv_kuerzel = 'PINGO'     and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs440')
                       or (fv.fv_kuerzel = 'IT_FALL'   and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs184')
                       )
            );
@@ -331,8 +348,8 @@ begin
             'rzhs184', 'SEMINR', 'SEMINAR.INT', 'rzhs184_seminar_int',
             'rzhs440', 'SEMINR', 'SEMINARINT', 'SEMINAR.INT', 'rzhs440_seminar_int');
     add_row('SEMINAR', 'IuK Veranstaltungsplan', 'SEMINAR',
-            'rzhs184', 'SEMINR', 'SEMINAR.ENTW', 'rzhs184_seminar_test',
-            'rzhs440', 'SEMINR', 'SEMINARENTW', 'SEMINAR.ENTW', 'rzhs440_seminar_test');
+            'rzhs184', 'SEMINR', 'SEMINAR.ENTW', 'rzhs184_seminar_entw',
+            'rzhs440', 'SEMINR', 'SEMINARENTW', 'SEMINAR.ENTW', 'rzhs440_seminar_entw');
 
     -- DBAE21 / OPK
     add_row('OPK', 'OPK', 'OPK',
@@ -348,24 +365,24 @@ begin
     -- SUPPORTFR / SUPPORT_FREE
     add_row('SUPPORTFR', 'SUPPORTFR', 'SUPPORT_FREE',
             'rzhs184', 'SUPPORTFR', 'SUPPORT_FREE.PROD', 'rzhs184_support_free_prod',
-            'rzhs440', 'SUPPORTFR', 'SUPPORT_FREE.PROD', 'SUPPORT_FREE.PROD', 'rzhs440_support_free_prod');
+            'rzhs441', 'SUPPORTFR', 'SUPPORT_FREE.PROD', 'SUPPORT_FREE.PROD', 'rzhs441_support_free_prod');
     add_row('SUPPORTFR', 'SUPPORTFR', 'SUPPORT_FREE',
             'rzhs184', 'SUPPORTFR', 'SUPPORT_FREE.INT', 'rzhs184_support_free_int',
-            'rzhs440', 'SUPPORTFR', 'SUPPORT_FREE.INT', 'SUPPORT_FREE.INT', 'rzhs440_support_free_int');
+            'rzhs441', 'SUPPORTFR', 'SUPPORT_FREE.INT', 'SUPPORT_FREE.INT', 'rzhs441_support_free_int');
     add_row('SUPPORTFR', 'SUPPORTFR', 'SUPPORT_FREE',
             'rzhs184', 'SUPPORTFR', 'SUPPORT_FREE.ENTW', 'rzhs184_support_free_entw',
-            'rzhs440', 'SUPPORTFR', 'SUPPORT_FREE.ENTW', 'SUPPORT_FREE.ENTW', 'rzhs440_support_free_entw');
+            'rzhs441', 'SUPPORTFR', 'SUPPORT_FREE.ENTW', 'SUPPORT_FREE.ENTW', 'rzhs441_support_free_entw');
 
     -- PINGO
     add_row('PINGO', 'PINGO', 'PINGO',
             'rzhs184', 'PINGO', 'PINGO.PROD', 'rzhs184_pingo_prod',
-            'rzhs440', 'PINGO', 'PINGO.PROD', 'PINGO.PROD', 'rzhs440_pingo_prod');
+            'rzhs442', 'PINGO', 'PINGO.PROD', 'PINGO.PROD', 'rzhs442_pingo_prod');
     add_row('PINGO', 'PINGO', 'PINGO',
             'rzhs184', 'PINGO', 'PINGO.INT', 'rzhs184_pingo_int',
-            'rzhs440', 'PINGO', 'PINGO.INT', 'PINGO.INT', 'rzhs440_pingo_int');
+            'rzhs442', 'PINGO', 'PINGO.INT', 'PINGO.INT', 'rzhs442_pingo_int');
     add_row('PINGO', 'PINGO', 'PINGO',
             'rzhs184', 'PINGO', 'PINGO.ENTW', 'rzhs184_pingo_entw',
-            'rzhs440', 'PINGO', 'PINGO.ENTW', 'PINGO.ENTW', 'rzhs440_pingo_entw');
+            'rzhs442', 'PINGO', 'PINGO.ENTW', 'PINGO.ENTW', 'rzhs442_pingo_entw');
 
     -- IT_FALL
     add_row('IT_FALL', 'IT-Fall-Verwaltung', 'IT_FALL',
@@ -373,7 +390,7 @@ begin
             'rzhs441', 'ITFALL', 'ITPROD', 'IT.PROD', 'rzhs441_itfallprod');
     add_row('IT_FALL', 'IT-Fall-Verwaltung', 'IT_FALL',
             'rzhs159', 'ITPROD', 'ITPROD', 'rzhs159_itprod',
-            'rzhs441', 'ITFALL', 'ITINT', 'IT.INT', 'rzhs441_itfalint');
+            'rzhs441', 'ITFALL', 'ITINT', 'IT.INT', 'rzhs441_itfallint');
     add_row('IT_FALL', 'IT-Fall-Verwaltung', 'IT_FALL',
             'rzhs159', 'ITPROD', 'ITPROD', 'rzhs159_itprod',
             'rzhs441', 'ITFALL', 'ITENTW', 'IT.ENTW', 'rzhs441_itfallentw');

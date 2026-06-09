@@ -79,11 +79,39 @@ declare
                 raise;
             end if;
     end;
+
+    procedure drop_obsolete_link(p_name in varchar2) is
+    begin
+        for r in (
+            select db_link
+            from   user_db_links
+            where  db_link = upper(p_name)
+            or     db_link like upper(p_name) || '.%'
+        ) loop
+            execute immediate 'drop database link ' || dbms_assert.qualified_sql_name(r.db_link);
+            dbms_output.put_line('DROPPED obsolete ' || r.db_link);
+        end loop;
+    end;
 begin
+    -- Clean up links from earlier, wrong inventory assumptions.
+    if l_recreate = 'Y' then
+        drop_obsolete_link('rzhs184_seminar_test');
+        drop_obsolete_link('rzhs440_seminar_test');
+        drop_obsolete_link('rzhs440_pingo_prod');
+        drop_obsolete_link('rzhs440_pingo_int');
+        drop_obsolete_link('rzhs440_pingo_entw');
+        drop_obsolete_link('rzhs440_support_free_prod');
+        drop_obsolete_link('rzhs440_support_free_int');
+        drop_obsolete_link('rzhs440_support_free_entw');
+        drop_obsolete_link('rzhs441_itfalint');
+        drop_obsolete_link('rzhs184_itfallprod');
+        drop_obsolete_link('rzhs184_itfallentw');
+    end if;
+
     ensure_link('rzhs184_seminar_int',          'rzhs184', 'seminar.int');
     ensure_link('rzhs440_seminar_int',          'rzhs440', 'seminar.int');
-    ensure_link('rzhs184_seminar_test',         'rzhs184', 'seminar.test');
-    ensure_link('rzhs440_seminar_test',         'rzhs440', 'seminar.test');
+    ensure_link('rzhs184_seminar_entw',         'rzhs184', 'SEMINAR.ENTW');
+    ensure_link('rzhs440_seminar_entw',         'rzhs440', 'SEMINAR.ENTW');
     ensure_link('rzhs184_opk_prod',             'rzhs184', 'opk.prod');
     ensure_link('rzhs440_opk_prod',             'rzhs440', 'opk.prod');
     ensure_link('rzhs184_opk_entw',             'rzhs184', 'opk.entw');
@@ -91,20 +119,20 @@ begin
     ensure_link('rzhs184_opk_int',              'rzhs184', 'opk.int');
     ensure_link('rzhs440_opk_int',              'rzhs440', 'opk.int');
     ensure_link('rzhs184_support_free_prod',    'rzhs184', 'SUPPORT_FREE.PROD');
-    ensure_link('rzhs440_support_free_prod',    'rzhs440', 'SUPPORT_FREE.PROD');
+    ensure_link('rzhs441_support_free_prod',    'rzhs441', 'SUPPORT_FREE.PROD');
     ensure_link('rzhs184_support_free_entw',    'rzhs184', 'SUPPORT_FREE.ENTW');
-    ensure_link('rzhs440_support_free_entw',    'rzhs440', 'SUPPORT_FREE.ENTW');
+    ensure_link('rzhs441_support_free_entw',    'rzhs441', 'SUPPORT_FREE.ENTW');
     ensure_link('rzhs184_support_free_int',     'rzhs184', 'SUPPORT_FREE.INT');
-    ensure_link('rzhs440_support_free_int',     'rzhs440', 'SUPPORT_FREE.INT');
+    ensure_link('rzhs441_support_free_int',     'rzhs441', 'SUPPORT_FREE.INT');
     ensure_link('rzhs184_pingo_prod',           'rzhs184', 'PINGO.PROD');
-    ensure_link('rzhs440_pingo_prod',           'rzhs440', 'PINGO.PROD');
+    ensure_link('rzhs442_pingo_prod',           'rzhs442', 'PINGO.PROD');
     ensure_link('rzhs184_pingo_int',            'rzhs184', 'PINGO.INT');
-    ensure_link('rzhs440_pingo_int',            'rzhs440', 'PINGO.INT');
+    ensure_link('rzhs442_pingo_int',            'rzhs442', 'PINGO.INT');
     ensure_link('rzhs184_pingo_entw',           'rzhs184', 'PINGO.ENTW');
-    ensure_link('rzhs440_pingo_entw',           'rzhs440', 'PINGO.ENTW');
+    ensure_link('rzhs442_pingo_entw',           'rzhs442', 'PINGO.ENTW');
     ensure_link('rzhs159_itprod',               'rzhs159', 'ITPROD.WORLD');
     ensure_link('rzhs441_itfallprod',           'rzhs441', 'itfallprod.WORLD');
-    ensure_link('rzhs441_itfalint',             'rzhs441', 'itfalint.WORLD');
+    ensure_link('rzhs441_itfallint',            'rzhs441', 'itfallint.WORLD');
     ensure_link('rzhs441_itfallentw',           'rzhs441', 'itfallentw.WORLD');
     ensure_link('rzhs406_paradox_prod',         'rzhs406', 'paradox.PROD');
     ensure_link('rzhs440_ggprod',               'rzhs440', 'ggprod.prod');
