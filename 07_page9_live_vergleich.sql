@@ -426,21 +426,23 @@ begin
         if remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGES', 'JAVASCRIPT_CODE')
            and remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGES', 'INLINE_CSS') then
             run_risk_query(
-                'select ''JS_CSS'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
-                '       p.page_name, ''PRUEFEN'',' ||
+                'select ''JS_CSS'', ''APP ''||to_char(a.application_id)||'' ''||a.application_name,' ||
+                '       to_char(count(*))||'' Seite(n)'', ''PRUEFEN'',' ||
+                '       ''JS/CSS vorhanden: '' ||' ||
                 '       rtrim(' ||
-                '            case when p.javascript_file_urls is not null then ''JS-Dateien, '' end ||' ||
-                '            case when p.javascript_code is not null then ''Inline-JS, '' end ||' ||
-                '            case when p.javascript_code_onload is not null then ''Onload-JS, '' end ||' ||
-                '            case when p.css_file_urls is not null then ''CSS-Dateien, '' end ||' ||
-                '            case when p.inline_css is not null then ''Inline-CSS, '' end, '', '')' ||
+                '         case when sum(case when p.javascript_file_urls is not null then 1 else 0 end) > 0 then ''JS-Dateien, '' end ||' ||
+                '         case when sum(case when p.javascript_code is not null then 1 else 0 end) > 0 then ''Inline-JS, '' end ||' ||
+                '         case when sum(case when p.javascript_code_onload is not null then 1 else 0 end) > 0 then ''Onload-JS, '' end ||' ||
+                '         case when sum(case when p.css_file_urls is not null then 1 else 0 end) > 0 then ''CSS-Dateien, '' end ||' ||
+                '         case when sum(case when p.inline_css is not null then 1 else 0 end) > 0 then ''Inline-CSS, '' end, '', '')' ||
                 '  from apex_application_pages@' || p_tgt_link || ' p' ||
                 '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
                 ' where ' || p_app_filter ||
                 '   and (p.javascript_file_urls is not null or p.javascript_code is not null' ||
                 '        or p.javascript_code_onload is not null or p.css_file_urls is not null' ||
                 '        or p.inline_css is not null)' ||
-                ' order by a.application_id, p.page_id');
+                ' group by a.application_id, a.application_name' ||
+                ' order by a.application_id');
         else
             l_skipped := l_skipped + 1;
         end if;
@@ -468,19 +470,9 @@ begin
             l_skipped := l_skipped + 1;
         end if;
 
-        if remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_PROC', 'PROCESS_SOURCE') then
-            run_risk_query(
-                'select ''EXTERNAL_CALL'', ''APP ''||to_char(a.application_id)||'' / PAGE ''||to_char(p.page_id),' ||
-                '       p.process_name, ''PRUEFEN'', ''PL/SQL contains URL/Jasper/Tomcat/HTTP reference''' ||
-                '  from apex_application_page_proc@' || p_tgt_link || ' p' ||
-                '  join apex_applications@' || p_tgt_link || ' a on a.application_id = p.application_id' ||
-                ' where ' || p_app_filter ||
-                '   and regexp_like(lower(dbms_lob.substr(p.process_source, 4000, 1)),' ||
-                '       ''(https?:|utl_http|apex_web_service|jasper|tomcat|ords|web_service)'')' ||
-                ' order by a.application_id, p.page_id, p.process_name');
-        else
-            l_skipped := l_skipped + 1;
-        end if;
+        -- PROCESS_SOURCE is often a CLOB. Oracle cannot reliably send temporary
+        -- LOB locators over DB links, so external-call text scanning is left to
+        -- export-file/offline checks instead of breaking this live page.
 
         if remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_REGIONS', 'WEB_SOURCE_MODULE_NAME')
            and remote_col_exists(p_tgt_link, 'APEX_APPLICATION_PAGE_PROC', 'WEB_SOURCE_MODULE_NAME') then
