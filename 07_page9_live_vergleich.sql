@@ -63,6 +63,46 @@ begin
         p_protection_level      => 'C',
         p_page_component_map    => '03');
 
+    wwv_flow_imp_page.create_page_plug(
+        p_id                    => wwv_flow_imp.id(90000000000000001),
+        p_plug_name             => 'Final Navigation Cleanup',
+        p_plug_display_sequence => 1,
+        p_plug_display_point    => 'BODY',
+        p_plug_source_type      => 'NATIVE_STATIC',
+        p_plug_source           => q'~<script>
+(function(){
+  function hideOldNavEntries(){
+    var hiddenTexts = {
+      "Home": true,
+      "Fachverfahren": true,
+      "Caesar Orders": true,
+      "Checkliste": true,
+      "Service Name Audit": true,
+      "Server Inventory": true
+    };
+    document.querySelectorAll(".t-TreeNav a, .t-Body-nav a, nav a").forEach(function(anchor){
+      var text = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+      var href = anchor.getAttribute("href") || "";
+      if (hiddenTexts[text] || /[:.]([2-8])[:.]/.test(href)) {
+        var row = anchor.closest("li");
+        if (row) {
+          row.style.display = "none";
+        } else {
+          anchor.style.display = "none";
+        }
+      }
+    });
+  }
+  hideOldNavEntries();
+  document.addEventListener("apexreadyend", hideOldNavEntries);
+  window.setTimeout(hideOldNavEntries, 300);
+})();
+</script>~',
+        p_attributes            => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'HTML',
+            'show_line_breaks', 'N')).to_clob);
+
     -- -------------------------------------------------------------------------
     -- Schaltflaechen-Region (Dialog Footer)
     -- -------------------------------------------------------------------------
@@ -986,8 +1026,7 @@ end;~',
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1')),
-        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
-        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_display_condition_type      => 'NEVER',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
         p_query_row_template          => wwv_flow_imp.id(10845430908759771),
@@ -1061,8 +1100,7 @@ end;~',
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1, 3, 2')),
-        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
-        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_display_condition_type      => 'NEVER',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
         p_query_row_template          => wwv_flow_imp.id(10845430908759771),
@@ -1118,8 +1156,7 @@ end;~',
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 4 desc nulls last, 2, 1')),
-        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
-        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_display_condition_type      => 'NEVER',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
         p_query_row_template          => wwv_flow_imp.id(10845430908759771),
@@ -1200,8 +1237,7 @@ end;~',
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1')),
-        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
-        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_display_condition_type      => 'NEVER',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
         p_query_row_template          => wwv_flow_imp.id(10845430908759771),
@@ -1288,8 +1324,7 @@ end;~',
             'from   dual',
             'where  not exists (select 1 from data)',
             'order by 1')),
-        p_display_when_condition      => 'P9_CLASSIC_REPORTS_DISABLED',
-        p_display_condition_type      => 'ITEM_IS_NOT_NULL',
+        p_display_condition_type      => 'NEVER',
         p_ajax_enabled                => 'Y',
         p_lazy_loading                => false,
         p_query_row_template          => wwv_flow_imp.id(10845430908759771),
