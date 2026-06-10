@@ -199,6 +199,7 @@ begin
         p_display_sequence           => 30,
         p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
         p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
+        p_display_condition_type     => 'NEVER',
         p_source_type                => 'NATIVE_SQL_REPORT',
         p_query_type                 => 'SQL',
         p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
