@@ -108,6 +108,8 @@ begin
         drop_obsolete_link('rzhs184_itfallentw');
     end if;
 
+    ensure_link('rzhs184_seminar_prod',         'rzhs184', 'SEMINAR.PROD');
+    ensure_link('rzhs440_seminar_prod',         'rzhs440', 'SEMINAR.PROD');
     ensure_link('rzhs184_seminar_int',          'rzhs184', 'seminar.int');
     ensure_link('rzhs440_seminar_int',          'rzhs440', 'seminar.int');
     ensure_link('rzhs184_seminar_entw',         'rzhs184', 'SEMINAR.ENTW');
@@ -136,6 +138,8 @@ begin
     ensure_link('rzhs441_itfallentw',           'rzhs441', 'itfallentw.WORLD');
     ensure_link('rzhs406_paradox_prod',         'rzhs406', 'paradox.PROD');
     ensure_link('rzhs440_ggprod',               'rzhs440', 'ggprod.prod');
+    ensure_link('rzhs440_ggint',                'rzhs440', 'GG.INT');
+    ensure_link('rzhs440_ggentw',               'rzhs440', 'GG.ENTW');
 end;
 /
 
@@ -147,6 +151,10 @@ order  by db_link;
 -- Optional manual tests:
 -- select 1 from dual@rzhs184_opk_entw;
 -- select 1 from dual@rzhs440_opk_entw;
+-- select 1 from dual@rzhs184_seminar_prod;
+-- select 1 from dual@rzhs440_seminar_prod;
 -- select 1 from dual@rzhs406_paradox_prod;
 -- select 1 from dual@rzhs440_ggprod;
+-- select 1 from dual@rzhs440_ggint;
+-- select 1 from dual@rzhs440_ggentw;
 --------------------------------------------------------------------------------

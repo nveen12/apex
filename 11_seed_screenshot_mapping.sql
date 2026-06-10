@@ -345,6 +345,9 @@ begin
 
     -- SEMINR / IuK Veranstaltungsplan
     add_row('SEMINAR', 'IuK Veranstaltungsplan', 'SEMINAR',
+            'rzhs184', 'SEMINR', 'SEMINAR.PROD', 'rzhs184_seminar_prod',
+            'rzhs440', 'SEMINR', 'SEMINARPROD', 'SEMINAR.PROD', 'rzhs440_seminar_prod');
+    add_row('SEMINAR', 'IuK Veranstaltungsplan', 'SEMINAR',
             'rzhs184', 'SEMINR', 'SEMINAR.INT', 'rzhs184_seminar_int',
             'rzhs440', 'SEMINR', 'SEMINARINT', 'SEMINAR.INT', 'rzhs440_seminar_int');
     add_row('SEMINAR', 'IuK Veranstaltungsplan', 'SEMINAR',
@@ -401,10 +404,10 @@ begin
             'rzhs440', 'GG', 'GGPROD', 'GG.PRD', 'rzhs440_ggprod');
     add_row('GG', 'Goettinger Gruppe', 'RZ782',
             'rzhs406', 'PARADO', 'PARADOX', 'rzhs406_paradox_prod',
-            'rzhs440', 'GG', 'GGINT', 'GG.INT', '##RZHS440_GGINT_LINK##');
+            'rzhs440', 'GG', 'GGINT', 'GG.INT', 'rzhs440_ggint');
     add_row('GG', 'Goettinger Gruppe', 'RZ782',
             'rzhs406', 'PARADO', 'PARADOX', 'rzhs406_paradox_prod',
-            'rzhs440', 'GG', 'GGENTW', 'GG.ENTW', '##RZHS440_GGENTW_LINK##');
+            'rzhs440', 'GG', 'GGENTW', 'GG.ENTW', 'rzhs440_ggentw');
 
     commit;
 end;
