@@ -726,6 +726,95 @@ end;~',
         p_page_component_map    => '16');
 
     wwv_flow_imp_page.create_page_plug(
+        p_id                    => wwv_flow_imp.id(91500000000001090),
+        p_plug_name             => 'Page 11 Layout Cleanup',
+        p_plug_display_sequence => 1,
+        p_plug_display_point    => 'BODY',
+        p_plug_source_type      => 'NATIVE_STATIC',
+        p_plug_source           => q'~<style>
+.t-Body-nav,.t-TreeNav{visibility:hidden}
+body #P11_ROW_SORT_CONTAINER,
+body #P11_UMGEBUNG_CONTAINER,
+body #P11_DATENBANK_CONTAINER,
+body #P11_QUELLE_HOST_DB_PDB_CONTAINER,
+body #P11_ZIEL_HOST_DB_PDB_CONTAINER,
+body #P11_SERVICE_NAME_ZIEL_CONTAINER,
+body #P11_APEX_VERSION_CONTAINER,
+body #P11_STATUS_CONTAINER,
+body #P11_URL_CONTAINER{
+  display:grid;
+  grid-template-columns:190px minmax(280px,720px);
+  align-items:start;
+  gap:8px 14px;
+  margin:0 0 10px 0;
+  max-width:980px;
+}
+body #P11_ROW_SORT_CONTAINER label,
+body #P11_UMGEBUNG_CONTAINER label,
+body #P11_DATENBANK_CONTAINER label,
+body #P11_QUELLE_HOST_DB_PDB_CONTAINER label,
+body #P11_ZIEL_HOST_DB_PDB_CONTAINER label,
+body #P11_SERVICE_NAME_ZIEL_CONTAINER label,
+body #P11_APEX_VERSION_CONTAINER label,
+body #P11_STATUS_CONTAINER label,
+body #P11_URL_CONTAINER label{
+  font-weight:600;
+  padding-top:6px;
+}
+body #P11_ROW_SORT,
+body #P11_UMGEBUNG,
+body #P11_DATENBANK,
+body #P11_QUELLE_HOST_DB_PDB,
+body #P11_ZIEL_HOST_DB_PDB,
+body #P11_SERVICE_NAME_ZIEL,
+body #P11_APEX_VERSION,
+body #P11_STATUS,
+body #P11_URL{
+  width:100%;
+  max-width:720px;
+  box-sizing:border-box;
+}
+.mt-edit-actions{display:flex;gap:8px;margin:18px 0 0 190px}
+.mt-edit-actions .t-Button{min-width:96px}
+</style>
+<script>
+(function(){
+  function hideOldNavEntries(){
+    var hiddenTexts = {
+      "Home": true,
+      "Fachverfahren": true,
+      "Caesar Orders": true,
+      "Checkliste": true,
+      "Service Name Audit": true,
+      "Server Inventory": true
+    };
+    document.querySelectorAll(".t-TreeNav a, .t-Body-nav a, nav a").forEach(function(anchor){
+      var text = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+      var href = anchor.getAttribute("href") || "";
+      if (hiddenTexts[text] || /[:.]([2-8])[:.]/.test(href)) {
+        var row = anchor.closest("li");
+        if (row) {
+          row.style.display = "none";
+        } else {
+          anchor.style.display = "none";
+        }
+      }
+    });
+    document.querySelectorAll(".t-Body-nav,.t-TreeNav,nav").forEach(function(nav){
+      nav.style.visibility = "visible";
+    });
+  }
+  hideOldNavEntries();
+  document.addEventListener("apexreadyend", hideOldNavEntries);
+  window.setTimeout(hideOldNavEntries, 300);
+})();
+</script>~',
+        p_attributes            => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'HTML',
+            'show_line_breaks', 'N')).to_clob);
+
+    wwv_flow_imp_page.create_page_plug(
         p_id                      => wwv_flow_imp.id(91500000000001100),
         p_plug_name               => 'Eintrag',
         p_title                   => 'Eintrag',
@@ -734,6 +823,24 @@ end;~',
         p_plug_display_sequence   => 10,
         p_plug_display_point      => 'BODY',
         p_plug_source_type        => 'NATIVE_STATIC',
+        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'HTML',
+            'show_line_breaks', 'N')).to_clob);
+
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(91500000000001104),
+        p_plug_name               => 'Aktionen',
+        p_region_template_options => '#DEFAULT#',
+        p_plug_template           => wwv_flow_imp.id(10818657374759767),
+        p_plug_display_sequence   => 20,
+        p_plug_display_point      => 'BODY',
+        p_plug_source_type        => 'NATIVE_STATIC',
+        p_plug_source             => q'~<div class="mt-edit-actions">
+  <button type="button" class="t-Button" onclick="window.location='f?p=&APP_ID.:1:&APP_SESSION.::&DEBUG.:::'">Abbrechen</button>
+  <button type="button" class="t-Button" onclick="if(confirm('Diesen Eintrag wirklich loeschen?')) apex.submit('DELETE');">Loeschen</button>
+  <button type="button" class="t-Button t-Button--hot" onclick="apex.submit('SAVE');">Speichern</button>
+</div>~',
         p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
             'expand_shortcuts', 'N',
             'output_as',        'HTML',
