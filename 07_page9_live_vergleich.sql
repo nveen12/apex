@@ -694,16 +694,32 @@ begin
         '  from all_objects@' || l_tgt_link ||
         '  where ' || l_tgt_filter ||
         '  and object_name not like ''BIN$%''' ||
+        '), err as (' ||
+        '  select owner, name, type,' ||
+        '         listagg(''Zeile ''||line||'':''||position||'' ''||substr(text,1,250), '' | '')' ||
+        '           within group (order by sequence) error_text' ||
+        '    from (' ||
+        '      select e.owner, e.name, e.type, e.sequence, e.line, e.position, e.text,' ||
+        '             row_number() over (partition by e.owner, e.name, e.type order by e.sequence) rn' ||
+        '        from all_errors@' || l_tgt_link || ' e' ||
+        '       where e.owner in (select owner from tgt)' ||
+        '    )' ||
+        '   where rn <= 3' ||
+        '   group by owner, name, type' ||
         ')' ||
         'select tgt.owner||''.''||tgt.object_name,' ||
         '       tgt.object_type,' ||
         '       src.status,' ||
         '       tgt.status,' ||
-        '       ''Quelle valid, Ziel invalid / Ziel geaendert: '' || to_char(tgt.last_ddl_time,''DD.MM.YYYY HH24:MI'')' ||
+        '       ''Ziel geaendert: '' || to_char(tgt.last_ddl_time,''DD.MM.YYYY HH24:MI'') || '' / '' ||' ||
+        '       nvl(err.error_text, ''Keine ALL_ERRORS-Details gefunden; Objekt manuell kompilieren/pruefen.'')' ||
         '  from tgt' ||
         '  join src on src.owner = tgt.owner' ||
         '          and src.object_name = tgt.object_name' ||
         '          and src.object_type = tgt.object_type' ||
+        '  left join err on err.owner = tgt.owner' ||
+        '               and err.name = tgt.object_name' ||
+        '               and err.type = tgt.object_type' ||
         ' where src.status = ''VALID''' ||
         '   and tgt.status <> ''VALID''' ||
         ' order by tgt.owner, tgt.object_type, tgt.object_name';
