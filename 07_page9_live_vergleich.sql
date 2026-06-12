@@ -449,10 +449,18 @@ begin
            and remote_col_exists(p_tgt_link, 'APEX_APPLICATIONS', 'AUTHENTICATION_SCHEME_TYPE') then
             run_risk_query(
                 'with src as (' ||
-                '  select application_id, application_name, authentication_scheme_type, authentication_scheme' ||
+                '  select application_id, application_name, authentication_scheme_type, authentication_scheme,' ||
+                '         case when upper(authentication_scheme_type) in (''APPLICATION EXPRESS ACCOUNTS'',''ORACLE APEX ACCOUNTS'')' ||
+                '              then ''APEX_ACCOUNTS'' else nvl(upper(authentication_scheme_type),''#'') end auth_type_norm,' ||
+                '         case when upper(authentication_scheme) in (''APPLICATION EXPRESS ACCOUNTS'',''ORACLE APEX ACCOUNTS'')' ||
+                '              then ''APEX_ACCOUNTS'' else nvl(upper(authentication_scheme),''#'') end auth_scheme_norm' ||
                 '    from apex_applications@' || p_src_link || ' a where ' || p_app_filter ||
                 '), tgt as (' ||
-                '  select application_id, application_name, authentication_scheme_type, authentication_scheme' ||
+                '  select application_id, application_name, authentication_scheme_type, authentication_scheme,' ||
+                '         case when upper(authentication_scheme_type) in (''APPLICATION EXPRESS ACCOUNTS'',''ORACLE APEX ACCOUNTS'')' ||
+                '              then ''APEX_ACCOUNTS'' else nvl(upper(authentication_scheme_type),''#'') end auth_type_norm,' ||
+                '         case when upper(authentication_scheme) in (''APPLICATION EXPRESS ACCOUNTS'',''ORACLE APEX ACCOUNTS'')' ||
+                '              then ''APEX_ACCOUNTS'' else nvl(upper(authentication_scheme),''#'') end auth_scheme_norm' ||
                 '    from apex_applications@' || p_tgt_link || ' a where ' || p_app_filter ||
                 ')' ||
                 'select ''AUTH_DIFF'', ''APP ''||to_char(tgt.application_id)||'' ''||tgt.application_name,' ||
@@ -460,8 +468,8 @@ begin
                 '       ''KRITISCH'',' ||
                 '       ''Authentication Scheme Quelle/Ziel unterschiedlich; Login und Rollen testen.''' ||
                 '  from tgt join src on src.application_id = tgt.application_id' ||
-                ' where nvl(src.authentication_scheme_type,''#'') <> nvl(tgt.authentication_scheme_type,''#'')' ||
-                '    or nvl(src.authentication_scheme,''#'') <> nvl(tgt.authentication_scheme,''#'')' ||
+                ' where src.auth_type_norm <> tgt.auth_type_norm' ||
+                '    or src.auth_scheme_norm <> tgt.auth_scheme_norm' ||
                 ' order by 2');
         else
             l_skipped := l_skipped + 1;
@@ -763,79 +771,6 @@ begin
         'Quelle Workspace / Seiten',
         'Ziel Workspace / Seiten',
         'Ergebnis',
-        'Hinweis');
-
-    l_sql :=
-        'with src_apps as (' ||
-        '  select a.application_id, a.application_name, a.workspace,' ||
-        '         (select count(*) from apex_application_pages@' || l_src_link ||
-        '           p where p.application_id = a.application_id) page_count' ||
-        '    from apex_applications@' || l_src_link || ' a' ||
-        '   where ' || l_app_filter ||
-        '), tgt_apps as (' ||
-        '  select a.application_id, a.application_name, a.workspace,' ||
-        '         (select count(*) from apex_application_pages@' || l_tgt_link ||
-        '           p where p.application_id = a.application_id) page_count' ||
-        '    from apex_applications@' || l_tgt_link || ' a' ||
-        '   where ' || l_app_filter ||
-        '), app_findings as (' ||
-        '  select ''APP ''||to_char(coalesce(src.application_id,tgt.application_id))||'' ''||' ||
-        '         coalesce(src.application_name,tgt.application_name) element,' ||
-        '         nvl(src.workspace||'' / Seiten ''||to_char(src.page_count), ''-'') quelle,' ||
-        '         nvl(tgt.workspace||'' / Seiten ''||to_char(tgt.page_count), ''-'') ziel,' ||
-        '         case when src.application_id is null then ''NUR_ZIEL''' ||
-        '              when tgt.application_id is null then ''NUR_QUELLE''' ||
-        '              else ''PAGE_COUNT_DIFF'' end status,' ||
-        '         case when src.application_id is null then ''App existiert nur im Ziel. Pruefen, ob erwartet.''' ||
-        '              when tgt.application_id is null then ''App fehlt im Ziel.''' ||
-        '              else ''Seitenanzahl weicht ab; fehlende Seiten unten pruefen.'' end info' ||
-        '    from src_apps src full outer join tgt_apps tgt' ||
-        '      on tgt.application_id = src.application_id' ||
-        '     and tgt.application_name = src.application_name' ||
-        '   where src.application_id is null' ||
-        '      or tgt.application_id is null' ||
-        '      or nvl(src.page_count,-1) <> nvl(tgt.page_count,-1)' ||
-        '), src_pages as (' ||
-        '  select a.application_id, a.application_name, p.page_id, p.page_name' ||
-        '    from src_apps a join apex_application_pages@' || l_src_link || ' p' ||
-        '      on p.application_id = a.application_id' ||
-        '   where exists (select 1 from tgt_apps t where t.application_id = a.application_id)' ||
-        '), tgt_pages as (' ||
-        '  select a.application_id, a.application_name, p.page_id, p.page_name' ||
-        '    from tgt_apps a join apex_application_pages@' || l_tgt_link || ' p' ||
-        '      on p.application_id = a.application_id' ||
-        '   where exists (select 1 from src_apps s where s.application_id = a.application_id)' ||
-        '), page_findings as (' ||
-        '  select ''APP ''||to_char(coalesce(src.application_id,tgt.application_id))||' ||
-        '         '' / PAGE ''||to_char(coalesce(src.page_id,tgt.page_id)) element,' ||
-        '         nvl(src.application_name||'' / ''||src.page_name, ''-'') quelle,' ||
-        '         nvl(tgt.application_name||'' / ''||tgt.page_name, ''-'') ziel,' ||
-        '         case when src.page_id is null then ''NUR_ZIEL_PAGE'' else ''NUR_QUELLE_PAGE'' end status,' ||
-        '         case when src.page_id is null then ''Seite existiert nur im Ziel.''' ||
-        '              else ''Seite fehlt im Ziel.'' end info' ||
-        '    from src_pages src full outer join tgt_pages tgt' ||
-        '      on tgt.application_id = src.application_id' ||
-        '     and tgt.page_id = src.page_id' ||
-        '   where src.page_id is null or tgt.page_id is null' ||
-        '), findings as (' ||
-        '  select * from app_findings' ||
-        '  union all' ||
-        '  select * from page_findings' ||
-        ')' ||
-        'select * from (' ||
-        '  select element, quelle, ziel, status, info from findings' ||
-        '  union all' ||
-        '  select ''APEX Basisvergleich'', ''Apps + Seiten'', ''Apps + Seiten'', ''OK'',' ||
-        '         ''Keine App-/Seiten-Differenzen gefunden. Runtime, Plugins, JS/CSS und fachliche Tests bleiben manuell zu pruefen.''' ||
-        '    from dual where not exists (select 1 from findings)' ||
-        ') order by status desc, element';
-    print_section(
-        'APEX-Kompatibilitaetsrisiken',
-        l_sql,
-        'Pruefpunkt',
-        'Quelle',
-        'Ziel',
-        'Risiko',
         'Hinweis');
 
     print_runtime_risks(l_src_link, l_tgt_link, l_app_filter);
