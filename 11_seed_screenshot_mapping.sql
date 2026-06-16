@@ -409,6 +409,13 @@ begin
             'rzhs406', 'PARADO', 'PARADOX', 'rzhs406_paradox_prod',
             'rzhs440', 'GG', 'GGENTW', 'GG.ENTW', 'rzhs440_ggentw');
 
+    -- STAPO -> VO (new service-level comparison entry, 2026-06-16)
+    -- TODO DBA: replace technical FV/schema labels when the authoritative
+    -- ALV-Migration.ods inventory provides the official values.
+    add_row('STAPO_VO', 'STAPO -> VO', 'STAPO_VO',
+            'rzhs406', 'STAPODB', 'stapodb.PROD', 'rzhs406_stapodb_prod',
+            'rzhs442', 'VO', 'voprod.PROD', 'voprod.PROD', 'rzhs442_voprod_prod');
+
     commit;
 end;
 /

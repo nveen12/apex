@@ -140,6 +140,8 @@ begin
     ensure_link('rzhs440_ggprod',               'rzhs440', 'ggprod.prod');
     ensure_link('rzhs440_ggint',                'rzhs440', 'GG.INT');
     ensure_link('rzhs440_ggentw',               'rzhs440', 'GG.ENTW');
+    ensure_link('rzhs406_stapodb_prod',         'rzhs406', 'stapodb.PROD');
+    ensure_link('rzhs442_voprod_prod',          'rzhs442', 'voprod.PROD');
 end;
 /
 
@@ -157,4 +159,6 @@ order  by db_link;
 -- select 1 from dual@rzhs440_ggprod;
 -- select 1 from dual@rzhs440_ggint;
 -- select 1 from dual@rzhs440_ggentw;
+-- select 1 from dual@rzhs406_stapodb_prod;
+-- select 1 from dual@rzhs442_voprod_prod;
 --------------------------------------------------------------------------------
