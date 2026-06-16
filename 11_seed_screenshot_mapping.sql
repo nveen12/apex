@@ -328,7 +328,7 @@ begin
     update mt_fv_pdb_mapping m
     set    aktiv = 'N',
            kommentar = 'Deaktiviert: Zielhost durch dblinks.docx korrigiert.'
-    where  nvl(m.mapping_role, m.rolle) = 'WORKBENCH'
+    where  m.mapping_role = 'WORKBENCH'
     and    exists (
                select 1
                from   mt_fachverfahren fv
@@ -340,6 +340,27 @@ begin
                          (fv.fv_kuerzel = 'SUPPORTFR' and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs440')
                       or (fv.fv_kuerzel = 'PINGO'     and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs440')
                       or (fv.fv_kuerzel = 'IT_FALL'   and regexp_replace(lower(s.hostname), '\.ofd-h\.de$', '') = 'rzhs184')
+                      )
+           );
+
+    -- Korrektur 2026-06-16: STAPO/VO eindeutig halten. Fruehere Iterationen
+    -- hatten stapodb.PROD bzw. technische Platzhalter. Nur die unten per
+    -- add_row neu gesetzte Quelle/Ziel-Kombination soll aktiv bleiben.
+    update mt_fv_pdb_mapping m
+    set    aktiv = 'N',
+           kommentar = 'Deaktiviert: STAPO/VO-Mapping auf aktuelle DB-Link-Namen bereinigt.'
+    where  m.mapping_role in ('QUELLE', 'WORKBENCH')
+    and    exists (
+               select 1
+               from   mt_fachverfahren fv
+               join   mt_pdb p on p.pdb_id = m.pdb_id
+               where  fv.fv_id = m.fv_id
+               and    fv.fv_kuerzel = 'STAPO_VO'
+               and    (
+                         (m.mapping_role = 'QUELLE'
+                          and upper(nvl(p.dblink_name, '-')) <> 'RZHS406_STAPOPDB_PROD')
+                      or (m.mapping_role = 'WORKBENCH'
+                          and upper(nvl(p.dblink_name, '-')) <> 'RZHS442_VOPROD_PROD')
                       )
            );
 
