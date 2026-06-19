@@ -297,6 +297,14 @@ begin
             .mt-live-table tbody tr:hover{background:#eef6ff}
             .mt-live-table tr:last-child td{border-bottom:0}
             .mt-live-table td:first-child{font-family:Consolas,''Courier New'',monospace}
+            .mt-invalid-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+                gap:1rem;max-width:1600px;align-items:start}
+            .mt-invalid-grid .mt-live-section{margin:1rem 0 2rem 0;max-width:none;min-width:0}
+            .mt-invalid-grid .mt-live-table th,.mt-invalid-grid .mt-live-table td{
+                white-space:normal;overflow-wrap:anywhere}
+            @media (max-width:900px){
+                .mt-invalid-grid{grid-template-columns:minmax(0,1fr)}
+            }
             .mt-status-ok{color:#166534;font-weight:700}
             .mt-status-diff,.mt-status-invalid,.mt-status-fehler,.mt-status-nur-quelle,.mt-status-nur-ziel,
             .mt-status-page-count-diff,.mt-status-nur-quelle-page,.mt-status-nur-ziel-page{color:#b42318;font-weight:700}
@@ -683,17 +691,54 @@ begin
         'Ergebnis',
         'Hinweis');
 
+    htp.p('<div class="mt-invalid-grid">');
+
     l_sql :=
-        'with src as (' ||
+        'with obj as (' ||
         '  select owner, object_name, object_type, status, last_ddl_time' ||
         '  from all_objects@' || l_src_link ||
         '  where ' || l_src_filter ||
         '  and object_name not like ''BIN$%''' ||
-        '), tgt as (' ||
+        '  and status <> ''VALID''' ||
+        '), err as (' ||
+        '  select owner, name, type,' ||
+        '         listagg(''Zeile ''||line||'':''||position||'' ''||substr(text,1,250), '' | '')' ||
+        '           within group (order by sequence) error_text' ||
+        '    from (' ||
+        '      select e.owner, e.name, e.type, e.sequence, e.line, e.position, e.text,' ||
+        '             row_number() over (partition by e.owner, e.name, e.type order by e.sequence) rn' ||
+        '        from all_errors@' || l_src_link || ' e' ||
+        '       where e.owner in (select owner from obj)' ||
+        '    )' ||
+        '   where rn <= 3' ||
+        '   group by owner, name, type' ||
+        ')' ||
+        'select obj.owner||''.''||obj.object_name,' ||
+        '       obj.object_type,' ||
+        '       to_char(obj.last_ddl_time,''DD.MM.YYYY HH24:MI''),' ||
+        '       obj.status,' ||
+        '       nvl(err.error_text, ''Keine ALL_ERRORS-Details gefunden.'')' ||
+        '  from obj' ||
+        '  left join err on err.owner = obj.owner' ||
+        '               and err.name = obj.object_name' ||
+        '               and err.type = obj.object_type' ||
+        ' order by obj.owner, obj.object_type, obj.object_name';
+    print_section(
+        'Quelle ungueltig',
+        l_sql,
+        'Objekt',
+        'Objekttyp',
+        'Letzte Aenderung',
+        'Status',
+        'Fehlerdetails');
+
+    l_sql :=
+        'with obj as (' ||
         '  select owner, object_name, object_type, status, last_ddl_time' ||
         '  from all_objects@' || l_tgt_link ||
         '  where ' || l_tgt_filter ||
         '  and object_name not like ''BIN$%''' ||
+        '  and status <> ''VALID''' ||
         '), err as (' ||
         '  select owner, name, type,' ||
         '         listagg(''Zeile ''||line||'':''||position||'' ''||substr(text,1,250), '' | '')' ||
@@ -702,35 +747,31 @@ begin
         '      select e.owner, e.name, e.type, e.sequence, e.line, e.position, e.text,' ||
         '             row_number() over (partition by e.owner, e.name, e.type order by e.sequence) rn' ||
         '        from all_errors@' || l_tgt_link || ' e' ||
-        '       where e.owner in (select owner from tgt)' ||
+        '       where e.owner in (select owner from obj)' ||
         '    )' ||
         '   where rn <= 3' ||
         '   group by owner, name, type' ||
         ')' ||
-        'select tgt.owner||''.''||tgt.object_name,' ||
-        '       tgt.object_type,' ||
-        '       src.status,' ||
-        '       tgt.status,' ||
-        '       ''Ziel geaendert: '' || to_char(tgt.last_ddl_time,''DD.MM.YYYY HH24:MI'') || '' / '' ||' ||
-        '       nvl(err.error_text, ''Keine ALL_ERRORS-Details gefunden; Objekt manuell kompilieren/pruefen.'')' ||
-        '  from tgt' ||
-        '  join src on src.owner = tgt.owner' ||
-        '          and src.object_name = tgt.object_name' ||
-        '          and src.object_type = tgt.object_type' ||
-        '  left join err on err.owner = tgt.owner' ||
-        '               and err.name = tgt.object_name' ||
-        '               and err.type = tgt.object_type' ||
-        ' where src.status = ''VALID''' ||
-        '   and tgt.status <> ''VALID''' ||
-        ' order by tgt.owner, tgt.object_type, tgt.object_name';
+        'select obj.owner||''.''||obj.object_name,' ||
+        '       obj.object_type,' ||
+        '       to_char(obj.last_ddl_time,''DD.MM.YYYY HH24:MI''),' ||
+        '       obj.status,' ||
+        '       nvl(err.error_text, ''Keine ALL_ERRORS-Details gefunden.'')' ||
+        '  from obj' ||
+        '  left join err on err.owner = obj.owner' ||
+        '               and err.name = obj.object_name' ||
+        '               and err.type = obj.object_type' ||
+        ' order by obj.owner, obj.object_type, obj.object_name';
     print_section(
-        'Ziel ungueltig, Quelle gueltig',
+        'Ziel ungueltig',
         l_sql,
-        'Ziel Objekt',
+        'Objekt',
         'Objekttyp',
-        'Quelle Status',
-        'Ziel Status',
-        'Hinweis');
+        'Letzte Aenderung',
+        'Status',
+        'Fehlerdetails');
+
+    htp.p('</div>');
 
     l_sql :=
         'with src as (' ||
