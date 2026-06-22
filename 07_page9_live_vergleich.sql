@@ -3,7 +3,7 @@ set define off
 set serveroutput on
 whenever sqlerror exit sql.sqlcode rollback
 
-prompt Installing Page 9 version: 2026-06-22-COMBINED-INVALID-TABLE
+prompt Installing Page 9 version: 2026-06-22-MULTISOURCE-RENDER-FIX-2
 
 -- =============================================================================
 -- Migration Tracker - Page 9: FV Detail / Live Vergleich
@@ -711,10 +711,14 @@ begin
             where  tm.mapping_id = :P9_MAPPING_ID
             and    tm.mapping_role = 'WORKBENCH'
             and    sm.mapping_role = 'QUELLE'
-            and    nvl(tm.aktiv, 'J') = 'J'
-            and    nvl(sm.aktiv, 'J') = 'J'
             and    p.dblink_name is not null
             and    p.dblink_name not like '##%##'
+            and    exists (
+                       select 1
+                       from   user_db_links l
+                       where  l.db_link = upper(p.dblink_name)
+                       or     l.db_link like upper(p.dblink_name) || '.%'
+                   )
             order  by s.hostname, p.dblink_name
         ) loop
             l_link  := dbms_assert.simple_sql_name(r.dblink_name);
@@ -1218,10 +1222,13 @@ end;~')),
             '        where  tm.mapping_id = :P9_MAPPING_ID',
             '        and    tm.mapping_role = ''WORKBENCH''',
             '        and    sm.mapping_role = ''QUELLE''',
-            '        and    nvl(tm.aktiv, ''J'') = ''J''',
-            '        and    nvl(sm.aktiv, ''J'') = ''J''',
             '        and    sp.dblink_name is not null',
             '        and    tp.dblink_name is not null',
+            '        and    exists (',
+            '                   select 1 from user_db_links l',
+            '                   where l.db_link = upper(sp.dblink_name)',
+            '                   or l.db_link like upper(sp.dblink_name) || ''.%''',
+            '               )',
             '    );',
             '',
             '    :P9_STATUS_TEXT := ''Quelle(n): '' || nvl(:P9_SRC_DBLINK_NAME, ''kein SRC-Link'')',
@@ -1237,6 +1244,12 @@ end;~')),
             '        :P9_TGT_DBLINK_NAME := null;',
             '        :P9_SOURCE_COUNT := 0;',
             '        :P9_STATUS_TEXT := ''Kein Source/Target-Mapping fuer diese Auswahl gefunden.'';',
+            '    when others then',
+            '        :P9_SRC_DBLINK_NAME := null;',
+            '        :P9_TGT_DBLINK_NAME := null;',
+            '        :P9_SOURCE_COUNT := 0;',
+            '        :P9_COMPARE_OK := null;',
+            '        :P9_STATUS_TEXT := ''Mapping-Aufloesung fehlgeschlagen: '' || sqlerrm;',
             'end;')),
         p_error_display_location => 'INLINE_IN_NOTIFICATION',
         p_internal_uid           => 90000000000000006);
@@ -1260,6 +1273,10 @@ end;~')),
             'exception',
             '    when no_data_found then',
             '        :P9_MIGRATION_DATE := to_char(sysdate - 90, ''YYYY-MM-DD'');',
+            '    when others then',
+            '        :P9_MIGRATION_DATE := to_char(sysdate - 90, ''YYYY-MM-DD'');',
+            '        :P9_STATUS_TEXT := nvl(:P9_STATUS_TEXT || '' / '', '''')',
+            '            || ''Migrationsdatum nicht lesbar: '' || sqlerrm;',
             'end;')),
         p_error_display_location => 'INLINE_IN_NOTIFICATION',
         p_internal_uid           => 90000000000000007);
@@ -1292,10 +1309,13 @@ end;~')),
             '            where  tm.mapping_id = :P9_MAPPING_ID',
             '            and    tm.mapping_role = ''WORKBENCH''',
             '            and    sm.mapping_role = ''QUELLE''',
-            '            and    nvl(tm.aktiv, ''J'') = ''J''',
-            '            and    nvl(sm.aktiv, ''J'') = ''J''',
             '            and    sp.dblink_name is not null',
             '            and    sp.dblink_name not like ''##%##''',
+            '            and    exists (',
+            '                       select 1 from user_db_links l',
+            '                       where l.db_link = upper(sp.dblink_name)',
+            '                       or l.db_link like upper(sp.dblink_name) || ''.%''',
+            '                   )',
             '        ) loop',
             '            execute immediate',
             '                ''select 1 from dual@'' || dbms_assert.simple_sql_name(r.dblink_name)',
@@ -1709,7 +1729,7 @@ end;~')),
     wwv_flow_imp.import_end(p_auto_install_sup_obj => false);
     commit;
     dbms_output.put_line(
-        'INSTALLED Page 9 version 2026-06-22-COMBINED-INVALID-TABLE');
+        'INSTALLED Page 9 version 2026-06-22-MULTISOURCE-RENDER-FIX-2');
 end;
 /
 
