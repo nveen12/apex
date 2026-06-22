@@ -143,6 +143,7 @@ begin
     ensure_link('rzhs440_ggint',                'rzhs440', 'GG.INT');
     ensure_link('rzhs440_ggentw',               'rzhs440', 'GG.ENTW');
     ensure_link('rzhs406_stapopdb_prod',        'rzhs406.ofd-h.de', 'stapopdb.PROD');
+    ensure_link('rzhs407_vollstrp_prod',        'rzhs407', 'VOLLSTRP.PROD');
     ensure_link('rzhs442_vostat_prd',           'rzhs442.ofd-h.de', 'VOSTAT.PRD');
 end;
 /
@@ -162,5 +163,6 @@ order  by db_link;
 -- select 1 from dual@rzhs440_ggint;
 -- select 1 from dual@rzhs440_ggentw;
 -- select 1 from dual@rzhs406_stapopdb_prod;
+-- select 1 from dual@rzhs407_vollstrp_prod;
 -- select 1 from dual@rzhs442_vostat_prd;
 --------------------------------------------------------------------------------

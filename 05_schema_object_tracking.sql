@@ -85,6 +85,50 @@ end;
 comment on column mt_fv_pdb_mapping.mapping_role is
     'Mapping role, e.g. QUELLE or WORKBENCH. Added for live comparison compatibility.';
 
+declare
+    l_count number;
+begin
+    select count(*)
+    into   l_count
+    from   all_tab_columns
+    where  owner       = sys_context('USERENV', 'CURRENT_SCHEMA')
+    and    table_name  = 'MT_FV_PDB_MAPPING'
+    and    column_name = 'AKTIV';
+
+    if l_count = 0 then
+        execute immediate q'[
+            alter table mt_fv_pdb_mapping add (
+                aktiv varchar2(1) default 'J' not null
+                    constraint ck_fv_pdb_mapping_aktiv check (aktiv in ('J','N'))
+            )
+        ]';
+    end if;
+end;
+/
+
+comment on column mt_fv_pdb_mapping.aktiv is
+    'J = mapping is selectable for Live Vergleich; N = obsolete or corrected mapping.';
+
+declare
+    l_count number;
+begin
+    select count(*)
+    into   l_count
+    from   all_tab_columns
+    where  owner       = sys_context('USERENV', 'CURRENT_SCHEMA')
+    and    table_name  = 'MT_FV_PDB_MAPPING'
+    and    column_name = 'KOMMENTAR';
+
+    if l_count = 0 then
+        execute immediate
+            'alter table mt_fv_pdb_mapping add (kommentar varchar2(2000))';
+    end if;
+end;
+/
+
+comment on column mt_fv_pdb_mapping.kommentar is
+    'Operational note for mapping corrections, deactivation, and inventory provenance.';
+
 update mt_server
 set    dblink_name = case lower(hostname)
            when 'rzhs184.ofd-h.de' then 'RZHS184_LINK'

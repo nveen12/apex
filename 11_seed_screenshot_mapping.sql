@@ -358,7 +358,10 @@ begin
                and    fv.fv_kuerzel = 'STAPO_VO'
                and    (
                          (m.mapping_role = 'QUELLE'
-                          and upper(nvl(p.dblink_name, '-')) <> 'RZHS406_STAPOPDB_PROD')
+                          and upper(nvl(p.dblink_name, '-')) not in (
+                                  'RZHS406_STAPOPDB_PROD',
+                                  'RZHS407_VOLLSTRP_PROD'
+                              ))
                       or (m.mapping_role = 'WORKBENCH'
                           and upper(nvl(p.dblink_name, '-')) <> 'RZHS442_VOSTAT_PRD')
                       )
@@ -430,11 +433,14 @@ begin
             'rzhs406', 'PARADO', 'PARADOX', 'rzhs406_paradox_prod',
             'rzhs440', 'GG', 'GGENTW', 'GG.ENTW', 'rzhs440_ggentw');
 
-    -- STAPOPDB -> VO (new service-level comparison entry, 2026-06-16)
+    -- Two source services migrate into VOSTAT.PRD.
     -- TODO DBA: replace technical FV/schema labels when the authoritative
     -- ALV-Migration.ods inventory provides the official values.
     add_row('STAPO_VO', 'STAPO -> VO', 'STAPO_VO',
             'rzhs406.ofd-h.de', 'STAPOPDB', 'stapopdb.PROD', 'rzhs406_stapopdb_prod',
+            'rzhs442', 'VO', 'voprod.PROD', 'VOSTAT.PRD', 'rzhs442_vostat_prd');
+    add_row('STAPO_VO', 'STAPO -> VO', 'STAPO_VO',
+            'rzhs407', 'VOLLSTRP', 'VOLLSTRP.PROD', 'rzhs407_vollstrp_prod',
             'rzhs442', 'VO', 'voprod.PROD', 'VOSTAT.PRD', 'rzhs442_vostat_prd');
 
     commit;
