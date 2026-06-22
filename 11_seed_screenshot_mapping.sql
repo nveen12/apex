@@ -360,7 +360,7 @@ begin
                          (m.mapping_role = 'QUELLE'
                           and upper(nvl(p.dblink_name, '-')) <> 'RZHS406_STAPOPDB_PROD')
                       or (m.mapping_role = 'WORKBENCH'
-                          and upper(nvl(p.dblink_name, '-')) <> 'RZHS442_VOPROD_PROD')
+                          and upper(nvl(p.dblink_name, '-')) <> 'RZHS442_VOSTAT_PRD')
                       )
            );
 
@@ -435,7 +435,7 @@ begin
     -- ALV-Migration.ods inventory provides the official values.
     add_row('STAPO_VO', 'STAPO -> VO', 'STAPO_VO',
             'rzhs406.ofd-h.de', 'STAPOPDB', 'stapopdb.PROD', 'rzhs406_stapopdb_prod',
-            'rzhs442', 'VO', 'voprod.PROD', 'voprod.PROD', 'rzhs442_voprod_prod');
+            'rzhs442', 'VO', 'voprod.PROD', 'VOSTAT.PRD', 'rzhs442_vostat_prd');
 
     commit;
 end;

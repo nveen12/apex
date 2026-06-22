@@ -107,6 +107,7 @@ begin
         drop_obsolete_link('rzhs184_itfallprod');
         drop_obsolete_link('rzhs184_itfallentw');
         drop_obsolete_link('rzhs406_stapodb_prod');
+        drop_obsolete_link('rzhs442_voprod_prod');
     end if;
 
     ensure_link('rzhs184_seminar_prod',         'rzhs184', 'SEMINAR.PROD');
@@ -142,7 +143,7 @@ begin
     ensure_link('rzhs440_ggint',                'rzhs440', 'GG.INT');
     ensure_link('rzhs440_ggentw',               'rzhs440', 'GG.ENTW');
     ensure_link('rzhs406_stapopdb_prod',        'rzhs406.ofd-h.de', 'stapopdb.PROD');
-    ensure_link('rzhs442_voprod_prod',          'rzhs442.ofd-h.de', 'voprod.PROD');
+    ensure_link('rzhs442_vostat_prd',           'rzhs442.ofd-h.de', 'VOSTAT.PRD');
 end;
 /
 
@@ -161,5 +162,5 @@ order  by db_link;
 -- select 1 from dual@rzhs440_ggint;
 -- select 1 from dual@rzhs440_ggentw;
 -- select 1 from dual@rzhs406_stapopdb_prod;
--- select 1 from dual@rzhs442_voprod_prod;
+-- select 1 from dual@rzhs442_vostat_prd;
 --------------------------------------------------------------------------------
