@@ -3,7 +3,7 @@ set define off
 set serveroutput on
 whenever sqlerror exit sql.sqlcode rollback
 
-prompt Installing Page 9 version: 2026-06-22-MULTISOURCE-RENDER-FIX-2
+prompt Installing Page 9 version: 2026-06-22-MULTISOURCE-PACKAGE-FIX-3
 
 -- =============================================================================
 -- Migration Tracker - Page 9: FV Detail / Live Vergleich
@@ -263,7 +263,7 @@ begin
         p_plug_display_sequence   => 9,
         p_plug_display_point      => 'BODY',
         p_plug_source_type        => 'NATIVE_PLSQL',
-        p_plug_source             => wwv_flow_string.join(wwv_flow_t_varchar2(q'~declare
+        p_plug_source             => wwv_flow_string.join_clob(wwv_flow_t_varchar2(q'~declare
     l_src_link varchar2(261);
     l_tgt_link varchar2(261);
     l_src_filter varchar2(32767);
@@ -677,303 +677,6 @@ begin
         htp.p('</tbody></table></div>');
     end;
 
-~', q'~
-    procedure print_multi_source(
-        p_tgt_link    in varchar2,
-        p_schema_list in varchar2,
-        p_app_filter  in varchar2
-    ) is
-        l_obj_union   varchar2(32767);
-        l_user_union  varchar2(32767);
-        l_table_union varchar2(32767);
-        l_app_union   varchar2(32767);
-        l_link        varchar2(261);
-        l_label       varchar2(4000);
-
-        procedure append_branch(
-            io_sql   in out nocopy varchar2,
-            p_branch in varchar2
-        ) is
-        begin
-            if io_sql is not null then
-                io_sql := io_sql || ' union all ';
-            end if;
-            io_sql := io_sql || p_branch;
-        end;
-    begin
-        for r in (
-            select distinct p.dblink_name, s.hostname
-            from   mt_fv_pdb_mapping tm
-            join   mt_fv_pdb_mapping sm on sm.fv_id = tm.fv_id
-            join   mt_pdb p             on p.pdb_id = sm.pdb_id
-            join   mt_cdb c             on c.cdb_id = p.cdb_id
-            join   mt_server s          on s.server_id = c.server_id
-            where  tm.mapping_id = :P9_MAPPING_ID
-            and    tm.mapping_role = 'WORKBENCH'
-            and    sm.mapping_role = 'QUELLE'
-            and    p.dblink_name is not null
-            and    p.dblink_name not like '##%##'
-            and    exists (
-                       select 1
-                       from   user_db_links l
-                       where  l.db_link = upper(p.dblink_name)
-                       or     l.db_link like upper(p.dblink_name) || '.%'
-                   )
-            order  by s.hostname, p.dblink_name
-        ) loop
-            l_link  := dbms_assert.simple_sql_name(r.dblink_name);
-            l_label := replace(r.hostname, '''', '''''');
-
-            append_branch(
-                l_user_union,
-                'select ''' || l_label || ''' source_name, username' ||
-                ' from all_users@' || l_link ||
-                ' where username in (' || p_schema_list || ')');
-
-            append_branch(
-                l_obj_union,
-                'select ''' || l_label || ''' source_name, owner, object_name,' ||
-                ' object_type, status, last_ddl_time' ||
-                ' from all_objects@' || l_link ||
-                ' where owner in (' || p_schema_list || ')' ||
-                ' and object_name not like ''BIN$%''');
-
-            append_branch(
-                l_table_union,
-                'select ''' || l_label || ''' source_name, owner, tablespace_name' ||
-                ' from all_tables@' || l_link ||
-                ' where owner in (' || p_schema_list || ')');
-
-            if remote_col_exists(l_link, 'APEX_APPLICATIONS', 'APPLICATION_ID') then
-                append_branch(
-                    l_app_union,
-                    'select ''' || l_label || ''' source_name, a.application_id,' ||
-                    ' a.application_name, a.workspace,' ||
-                    ' (select count(*) from apex_application_pages@' || l_link ||
-                    ' p where p.application_id = a.application_id) pages' ||
-                    ' from apex_applications@' || l_link || ' a where ' || p_app_filter);
-            end if;
-        end loop;
-
-        l_sql :=
-            'with src_users as (' || l_user_union || '),' ||
-            ' src_map as (' ||
-            '   select username, count(*) source_count,' ||
-            '          listagg(source_name, '', '') within group (order by source_name) sources' ||
-            '   from src_users group by username' ||
-            ' ), tgt as (' ||
-            '   select username from all_users@' || p_tgt_link ||
-            '   where username in (' || p_schema_list || ')' ||
-            ' )' ||
-            ' select tgt.username,' ||
-            '        nvl(src_map.sources, ''-''),' ||
-            '        ''Ziel vorhanden'',' ||
-            '        case when nvl(src_map.source_count,0)=0 then ''NUR_ZIEL''' ||
-            '             when src_map.source_count=1 then ''OK'' else ''MEHRDEUTIG'' end,' ||
-            '        case when nvl(src_map.source_count,0)=0 then ''Schema auf keiner Quelle gefunden.''' ||
-            '             when src_map.source_count=1 then ''Quelle automatisch zugeordnet.''' ||
-            '             else ''Schema auf mehreren Quellen gefunden; keine automatische Objektzuordnung.'' end' ||
-            ' from tgt left join src_map on src_map.username=tgt.username' ||
-            ' order by tgt.username';
-        print_section(
-            'Schema-Zuordnung',
-            l_sql,
-            'Zielschema',
-            'Gefundene Quelle(n)',
-            'Ziel',
-            'Status',
-            'Hinweis');
-
-        l_sql :=
-            'with src_raw as (' || l_obj_union || '),' ||
-            ' src_map as (' ||
-            '   select username owner, count(*) source_count' ||
-            '   from (' || l_user_union || ') group by username' ||
-            ' ), src as (' ||
-            '   select r.owner||''.''||r.object_type element, count(*) cnt,' ||
-            '          max(r.source_name) source_name' ||
-            '   from src_raw r join src_map m on m.owner=r.owner and m.source_count=1' ||
-            '   where r.object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',' ||
-            '       ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',''INDEX'',' ||
-            '       ''SYNONYM'',''TYPE'',''TYPE BODY'')' ||
-            '   group by r.owner,r.object_type' ||
-            ' ), tgt as (' ||
-            '   select owner||''.''||object_type element,count(*) cnt' ||
-            '   from all_objects@' || p_tgt_link ||
-            '   where owner in (' || p_schema_list || ')' ||
-            '   and object_type in (''TABLE'',''VIEW'',''PROCEDURE'',''FUNCTION'',' ||
-            '       ''PACKAGE'',''PACKAGE BODY'',''TRIGGER'',''SEQUENCE'',''INDEX'',' ||
-            '       ''SYNONYM'',''TYPE'',''TYPE BODY'')' ||
-            '   and object_name not like ''BIN$%''' ||
-            '   group by owner,object_type' ||
-            ' )' ||
-            ' select coalesce(src.element,tgt.element),to_char(nvl(src.cnt,0)),' ||
-            '        to_char(nvl(tgt.cnt,0)),' ||
-            '        case when nvl(src.cnt,0)=nvl(tgt.cnt,0) then ''OK'' else ''DIFF'' end,' ||
-            '        src.source_name' ||
-            ' from src full outer join tgt on tgt.element=src.element order by 1';
-        print_section(
-            'Objektanzahl nach Schema und Typ',
-            l_sql,
-            'Schema.Objekttyp',
-            'Quelle Anzahl',
-            'Ziel Anzahl',
-            'Ergebnis',
-            'Quelle');
-
-        l_sql :=
-            'with src_raw as (' || l_obj_union || '),' ||
-            ' src_map as (' ||
-            '   select username owner,count(*) source_count from (' || l_user_union ||
-            '   ) group by username' ||
-            ' ), src as (' ||
-            '   select r.* from src_raw r join src_map m on m.owner=r.owner and m.source_count=1' ||
-            ' ), tgt as (' ||
-            '   select owner,object_name,object_type,status,last_ddl_time' ||
-            '   from all_objects@' || p_tgt_link ||
-            '   where owner in (' || p_schema_list || ')' ||
-            '   and object_name not like ''BIN$%''' ||
-            ' ), err as (' ||
-            '   select owner,name,type,' ||
-            '          listagg(''Zeile ''||line||'':''||position||'' ''||substr(text,1,250),'' | '')' ||
-            '          within group(order by sequence) error_text' ||
-            '   from (select e.*,row_number() over(partition by owner,name,type order by sequence) rn' ||
-            '         from all_errors@' || p_tgt_link || ' e' ||
-            '         where owner in (' || p_schema_list || '))' ||
-            '   where rn<=3 group by owner,name,type' ||
-            ' )' ||
-            ' select tgt.owner||''.''||tgt.object_name,tgt.object_type,src.status,tgt.status,' ||
-            '        src.source_name||'' / ''||nvl(err.error_text,''Keine ALL_ERRORS-Details gefunden.'')' ||
-            ' from tgt join src on src.owner=tgt.owner and src.object_name=tgt.object_name' ||
-            '  and src.object_type=tgt.object_type' ||
-            ' left join err on err.owner=tgt.owner and err.name=tgt.object_name and err.type=tgt.object_type' ||
-            ' where src.status=''VALID'' and tgt.status<>''VALID''' ||
-            ' order by tgt.owner,tgt.object_type,tgt.object_name';
-        print_section(
-            'Quelle gueltig, Ziel ungueltig',
-            l_sql,
-            'Ziel Objekt',
-            'Objekttyp',
-            'Quelle Status',
-            'Ziel Status',
-            'Quelle / Fehlerdetails');
-
-        l_sql :=
-            'with src_raw as (' || l_obj_union || '),' ||
-            ' src_map as (select username owner,count(*) source_count from (' ||
-            l_user_union || ') group by username),' ||
-            ' src as (' ||
-            '   select r.source_name||'':''||r.owner||''.''||r.object_name||'' (''||r.object_type||'')'' element,' ||
-            '          row_number() over(order by r.source_name,r.owner,r.object_type,r.object_name) rn' ||
-            '   from src_raw r join src_map m on m.owner=r.owner and m.source_count=1' ||
-            '   where r.status<>''VALID''' ||
-            ' ), tgt as (' ||
-            '   select owner||''.''||object_name||'' (''||object_type||'')'' element,' ||
-            '          row_number() over(order by owner,object_type,object_name) rn' ||
-            '   from all_objects@' || p_tgt_link ||
-            '   where owner in (' || p_schema_list || ')' ||
-            '   and object_name not like ''BIN$%'' and status<>''VALID''' ||
-            ' )' ||
-            ' select src.element,tgt.element,null,null,null' ||
-            ' from src full outer join tgt on tgt.rn=src.rn' ||
-            ' order by coalesce(src.rn,tgt.rn)';
-        htp.p('<div class="mt-invalid-pair">');
-        print_section(
-            'Ungueltige Objekte',
-            l_sql,
-            'Quelle ungueltig',
-            'Ziel ungueltig',
-            '',
-            '',
-            '');
-        htp.p('</div>');
-
-        l_sql :=
-            'with src_raw as (' || l_table_union || '),' ||
-            ' src_map as (select username owner,count(*) source_count from (' ||
-            l_user_union || ') group by username),' ||
-            ' src as (' ||
-            '   select nvl(r.tablespace_name,''<NULL>'') element,count(*) cnt' ||
-            '   from src_raw r join src_map m on m.owner=r.owner and m.source_count=1' ||
-            '   group by nvl(r.tablespace_name,''<NULL>'')' ||
-            ' ), tgt as (' ||
-            '   select nvl(tablespace_name,''<NULL>'') element,count(*) cnt' ||
-            '   from all_tables@' || p_tgt_link ||
-            '   where owner in (' || p_schema_list || ')' ||
-            '   group by nvl(tablespace_name,''<NULL>'')' ||
-            ' )' ||
-            ' select coalesce(src.element,tgt.element),to_char(nvl(src.cnt,0)),' ||
-            '        to_char(nvl(tgt.cnt,0)),' ||
-            '        case when nvl(src.cnt,0)=nvl(tgt.cnt,0) then ''OK'' else ''DIFF'' end,null' ||
-            ' from src full outer join tgt on tgt.element=src.element order by 1';
-        print_section(
-            'Tablespace-Vergleich',
-            l_sql,
-            'Tablespace',
-            'Tabellen Quelle',
-            'Tabellen Ziel',
-            'Ergebnis',
-            'Hinweis');
-
-        if l_app_union is not null then
-            l_sql :=
-                'with src_raw as (' || l_app_union || '),' ||
-                ' src as (' ||
-                '   select application_id,application_name,count(*) source_count,' ||
-                '          listagg(source_name,'', '') within group(order by source_name) sources,' ||
-                '          max(workspace) workspace,max(pages) pages' ||
-                '   from src_raw group by application_id,application_name' ||
-                ' ), tgt as (' ||
-                '   select a.application_id,a.application_name,a.workspace,' ||
-                '          (select count(*) from apex_application_pages@' || p_tgt_link ||
-                '           p where p.application_id=a.application_id) pages' ||
-                '   from apex_applications@' || p_tgt_link || ' a where ' || p_app_filter ||
-                ' )' ||
-                ' select to_char(coalesce(src.application_id,tgt.application_id))||'' ''||' ||
-                '        coalesce(src.application_name,tgt.application_name),' ||
-                '        src.sources||'' / ''||src.workspace||'' / Seiten ''||src.pages,' ||
-                '        tgt.workspace||'' / Seiten ''||tgt.pages,' ||
-                '        case when src.application_id is null then ''NUR_ZIEL''' ||
-                '             when tgt.application_id is null then ''NUR_QUELLE''' ||
-                '             when src.source_count>1 then ''MEHRDEUTIG''' ||
-                '             when nvl(src.pages,-1)=nvl(tgt.pages,-1) then ''OK'' else ''DIFF'' end,' ||
-                '        case when src.source_count>1 then ''App auf mehreren Quellen gefunden.'' end' ||
-                ' from src full outer join tgt on tgt.application_id=src.application_id' ||
-                '  and tgt.application_name=src.application_name order by 1';
-            print_section(
-                'APEX-Anwendungen',
-                l_sql,
-                'APEX App',
-                'Quelle(n) Workspace / Seiten',
-                'Ziel Workspace / Seiten',
-                'Ergebnis',
-                'Hinweis');
-        else
-            l_sql :=
-                'select ''APEX Metadaten'',''-'',''-'',''INFO'',' ||
-                '''Keine lesbaren APEX Dictionary Views auf den Quellen gefunden.'' from dual';
-            print_section(
-                'APEX-Anwendungen',
-                l_sql,
-                'APEX App',
-                'Quelle(n) Workspace / Seiten',
-                'Ziel Workspace / Seiten',
-                'Ergebnis',
-                'Hinweis');
-        end if;
-
-        l_sql :=
-            'select ''MULTI_SOURCE'',''VOSTAT.PRD'',''Zielmetadaten'',''PRUEFEN'',' ||
-            '''Runtime-, Plugin-, JS/CSS- und fachliche Tests bleiben je Anwendung manuell durchzufuehren.'' from dual';
-        print_section(
-            'APEX Runtime-Risiken',
-            l_sql,
-            'Kategorie',
-            'App / Seite',
-            'Komponente',
-            'Risiko',
-            'Hinweis');
-    end;
 begin
     if :P9_COMPARE_OK is null then
         htp.p('<div class="t-Alert t-Alert--warning">Kein Vergleich moeglich: ' ||
@@ -999,7 +702,10 @@ begin
     end if;
 
     if nvl(:P9_SOURCE_COUNT, 0) > 1 then
-        print_multi_source(l_tgt_link, l_schema_list, l_app_filter);
+        mt_live_multisource_pkg.render(
+            p_mapping_id => :P9_MAPPING_ID,
+            p_tgt_link   => l_tgt_link,
+            p_schema_csv => l_schema_list);
         return;
     end if;
 
@@ -1729,7 +1435,7 @@ end;~')),
     wwv_flow_imp.import_end(p_auto_install_sup_obj => false);
     commit;
     dbms_output.put_line(
-        'INSTALLED Page 9 version 2026-06-22-MULTISOURCE-RENDER-FIX-2');
+        'INSTALLED Page 9 version 2026-06-22-MULTISOURCE-PACKAGE-FIX-3');
 end;
 /
 
