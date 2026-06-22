@@ -155,6 +155,8 @@ create or replace package body mt_live_multisource_pkg as
         for r in (
             select distinct p.dblink_name, s.hostname
             from   mt_fv_pdb_mapping tm
+            join   mt_pdb tp            on tp.pdb_id = tm.pdb_id
+            join   mt_fachverfahren fv  on fv.fv_id = tm.fv_id
             join   mt_fv_pdb_mapping sm on sm.fv_id = tm.fv_id
             join   mt_pdb p             on p.pdb_id = sm.pdb_id
             join   mt_cdb c             on c.cdb_id = p.cdb_id
@@ -162,6 +164,10 @@ create or replace package body mt_live_multisource_pkg as
             where  tm.mapping_id = p_mapping_id
             and    tm.mapping_role = 'WORKBENCH'
             and    sm.mapping_role = 'QUELLE'
+            and    nvl(tm.aktiv, 'J') = 'J'
+            and    nvl(sm.aktiv, 'J') = 'J'
+            and    (nvl(p.tier, '-') = nvl(tp.tier, '-')
+                    or fv.fv_kuerzel in ('GG', 'IT_FALL'))
             and    p.dblink_name is not null
             and    p.dblink_name not like '##%##'
             and    exists (

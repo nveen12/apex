@@ -3,7 +3,7 @@ set define off
 set serveroutput on
 whenever sqlerror exit sql.sqlcode rollback
 
-prompt Installing Page 9 version: 2026-06-22-MULTISOURCE-PACKAGE-FIX-3
+prompt Installing Page 9 version: 2026-06-22-MULTISOURCE-TIER-FIX-4
 
 -- =============================================================================
 -- Migration Tracker - Page 9: FV Detail / Live Vergleich
@@ -923,11 +923,16 @@ end;~')),
             '               tp.dblink_name as tgt_dblink_name',
             '        from   mt_fv_pdb_mapping tm',
             '        join   mt_pdb tp on tp.pdb_id = tm.pdb_id',
+            '        join   mt_fachverfahren fv on fv.fv_id = tm.fv_id',
             '        join   mt_fv_pdb_mapping sm on sm.fv_id = tm.fv_id',
             '        join   mt_pdb sp on sp.pdb_id = sm.pdb_id',
             '        where  tm.mapping_id = :P9_MAPPING_ID',
             '        and    tm.mapping_role = ''WORKBENCH''',
             '        and    sm.mapping_role = ''QUELLE''',
+            '        and    nvl(tm.aktiv, ''J'') = ''J''',
+            '        and    nvl(sm.aktiv, ''J'') = ''J''',
+            '        and    (nvl(sp.tier, ''-'') = nvl(tp.tier, ''-'')',
+            '                or fv.fv_kuerzel in (''GG'', ''IT_FALL''))',
             '        and    sp.dblink_name is not null',
             '        and    tp.dblink_name is not null',
             '        and    exists (',
@@ -1010,11 +1015,17 @@ end;~')),
             '        for r in (',
             '            select distinct sp.dblink_name',
             '            from   mt_fv_pdb_mapping tm',
+            '            join   mt_pdb tp on tp.pdb_id = tm.pdb_id',
+            '            join   mt_fachverfahren fv on fv.fv_id = tm.fv_id',
             '            join   mt_fv_pdb_mapping sm on sm.fv_id = tm.fv_id',
             '            join   mt_pdb sp on sp.pdb_id = sm.pdb_id',
             '            where  tm.mapping_id = :P9_MAPPING_ID',
             '            and    tm.mapping_role = ''WORKBENCH''',
             '            and    sm.mapping_role = ''QUELLE''',
+            '            and    nvl(tm.aktiv, ''J'') = ''J''',
+            '            and    nvl(sm.aktiv, ''J'') = ''J''',
+            '            and    (nvl(sp.tier, ''-'') = nvl(tp.tier, ''-'')',
+            '                    or fv.fv_kuerzel in (''GG'', ''IT_FALL''))',
             '            and    sp.dblink_name is not null',
             '            and    sp.dblink_name not like ''##%##''',
             '            and    exists (',
@@ -1435,7 +1446,7 @@ end;~')),
     wwv_flow_imp.import_end(p_auto_install_sup_obj => false);
     commit;
     dbms_output.put_line(
-        'INSTALLED Page 9 version 2026-06-22-MULTISOURCE-PACKAGE-FIX-3');
+        'INSTALLED Page 9 version 2026-06-22-MULTISOURCE-TIER-FIX-4');
 end;
 /
 

@@ -189,7 +189,7 @@ declare
         else
             update mt_pdb
             set    service_name = p_service_name,
-                   tier         = nvl(tier, l_tier),
+                   tier         = nvl(l_tier, tier),
                    dblink_name  = p_dblink_name
             where  cdb_id = l_cdb_id
             and    upper(pdb_name) = upper(p_pdb_name);
