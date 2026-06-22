@@ -1,6 +1,9 @@
 set echo on
 set define off
+set serveroutput on
 whenever sqlerror exit sql.sqlcode rollback
+
+prompt Installing Page 9 version: 2026-06-22-COMBINED-INVALID-TABLE
 
 -- =============================================================================
 -- Migration Tracker - Page 9: FV Detail / Live Vergleich
@@ -1332,6 +1335,8 @@ end;~',
 
     wwv_flow_imp.import_end(p_auto_install_sup_obj => false);
     commit;
+    dbms_output.put_line(
+        'INSTALLED Page 9 version 2026-06-22-COMBINED-INVALID-TABLE');
 end;
 /
 
@@ -1346,6 +1351,9 @@ where  application_id = (
        )
 and    page_id        = 9
 order  by display_sequence;
+
+prompt Expected output: one "Ungueltige Objekte" table with columns
+prompt "Quelle ungueltig" and "Ziel ungueltig".
 
 select region_name, display_sequence, condition_type
 from   apex_application_page_regions
