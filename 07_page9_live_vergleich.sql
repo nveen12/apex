@@ -297,15 +297,18 @@ begin
             .mt-live-table tbody tr:hover{background:#eef6ff}
             .mt-live-table tr:last-child td{border-bottom:0}
             .mt-live-table td:first-child{font-family:Consolas,''Courier New'',monospace}
-            .mt-invalid-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-                gap:1rem;max-width:1600px;align-items:start}
-            .mt-invalid-grid .mt-live-section{margin:1rem 0 2rem 0;max-width:none;min-width:0}
+            .mt-invalid-grid{display:flex!important;gap:1rem;width:100%;max-width:1600px;
+                align-items:flex-start}
+            .mt-invalid-grid>style{display:none!important}
+            .mt-invalid-grid>.mt-live-section{flex:1 1 0;width:0;margin:1rem 0 2rem 0;
+                max-width:none;min-width:0}
             .mt-invalid-grid .mt-live-table th,.mt-invalid-grid .mt-live-table td{
                 white-space:normal;overflow-wrap:anywhere}
             .mt-invalid-grid .mt-live-table th:nth-child(n+3),
             .mt-invalid-grid .mt-live-table td:nth-child(n+3){display:none}
             @media (max-width:900px){
-                .mt-invalid-grid{grid-template-columns:minmax(0,1fr)}
+                .mt-invalid-grid{display:block!important}
+                .mt-invalid-grid>.mt-live-section{width:100%}
             }
             .mt-status-ok{color:#166534;font-weight:700}
             .mt-status-diff,.mt-status-invalid,.mt-status-fehler,.mt-status-nur-quelle,.mt-status-nur-ziel,
