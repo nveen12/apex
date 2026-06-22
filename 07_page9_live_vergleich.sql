@@ -425,7 +425,11 @@ begin
             if dbms_sql.is_open(c) then
                 dbms_sql.close_cursor(c);
             end if;
-            raise;
+            apex_debug.error(
+                'Live Vergleich target schema discovery failed for %s: %s',
+                p_link,
+                sqlerrm);
+            return null;
     end;
 
 ~', q'~
@@ -736,13 +740,15 @@ begin
                 ' from all_tables@' || l_link ||
                 ' where owner in (' || p_schema_list || ')');
 
-            append_branch(
-                l_app_union,
-                'select ''' || l_label || ''' source_name, a.application_id,' ||
-                ' a.application_name, a.workspace,' ||
-                ' (select count(*) from apex_application_pages@' || l_link ||
-                ' p where p.application_id = a.application_id) pages' ||
-                ' from apex_applications@' || l_link || ' a where ' || p_app_filter);
+            if remote_col_exists(l_link, 'APEX_APPLICATIONS', 'APPLICATION_ID') then
+                append_branch(
+                    l_app_union,
+                    'select ''' || l_label || ''' source_name, a.application_id,' ||
+                    ' a.application_name, a.workspace,' ||
+                    ' (select count(*) from apex_application_pages@' || l_link ||
+                    ' p where p.application_id = a.application_id) pages' ||
+                    ' from apex_applications@' || l_link || ' a where ' || p_app_filter);
+            end if;
         end loop;
 
         l_sql :=
@@ -905,38 +911,52 @@ begin
             'Ergebnis',
             'Hinweis');
 
-        l_sql :=
-            'with src_raw as (' || l_app_union || '),' ||
-            ' src as (' ||
-            '   select application_id,application_name,count(*) source_count,' ||
-            '          listagg(source_name,'', '') within group(order by source_name) sources,' ||
-            '          max(workspace) workspace,max(pages) pages' ||
-            '   from src_raw group by application_id,application_name' ||
-            ' ), tgt as (' ||
-            '   select a.application_id,a.application_name,a.workspace,' ||
-            '          (select count(*) from apex_application_pages@' || p_tgt_link ||
-            '           p where p.application_id=a.application_id) pages' ||
-            '   from apex_applications@' || p_tgt_link || ' a where ' || p_app_filter ||
-            ' )' ||
-            ' select to_char(coalesce(src.application_id,tgt.application_id))||'' ''||' ||
-            '        coalesce(src.application_name,tgt.application_name),' ||
-            '        src.sources||'' / ''||src.workspace||'' / Seiten ''||src.pages,' ||
-            '        tgt.workspace||'' / Seiten ''||tgt.pages,' ||
-            '        case when src.application_id is null then ''NUR_ZIEL''' ||
-            '             when tgt.application_id is null then ''NUR_QUELLE''' ||
-            '             when src.source_count>1 then ''MEHRDEUTIG''' ||
-            '             when nvl(src.pages,-1)=nvl(tgt.pages,-1) then ''OK'' else ''DIFF'' end,' ||
-            '        case when src.source_count>1 then ''App auf mehreren Quellen gefunden.'' end' ||
-            ' from src full outer join tgt on tgt.application_id=src.application_id' ||
-            '  and tgt.application_name=src.application_name order by 1';
-        print_section(
-            'APEX-Anwendungen',
-            l_sql,
-            'APEX App',
-            'Quelle(n) Workspace / Seiten',
-            'Ziel Workspace / Seiten',
-            'Ergebnis',
-            'Hinweis');
+        if l_app_union is not null then
+            l_sql :=
+                'with src_raw as (' || l_app_union || '),' ||
+                ' src as (' ||
+                '   select application_id,application_name,count(*) source_count,' ||
+                '          listagg(source_name,'', '') within group(order by source_name) sources,' ||
+                '          max(workspace) workspace,max(pages) pages' ||
+                '   from src_raw group by application_id,application_name' ||
+                ' ), tgt as (' ||
+                '   select a.application_id,a.application_name,a.workspace,' ||
+                '          (select count(*) from apex_application_pages@' || p_tgt_link ||
+                '           p where p.application_id=a.application_id) pages' ||
+                '   from apex_applications@' || p_tgt_link || ' a where ' || p_app_filter ||
+                ' )' ||
+                ' select to_char(coalesce(src.application_id,tgt.application_id))||'' ''||' ||
+                '        coalesce(src.application_name,tgt.application_name),' ||
+                '        src.sources||'' / ''||src.workspace||'' / Seiten ''||src.pages,' ||
+                '        tgt.workspace||'' / Seiten ''||tgt.pages,' ||
+                '        case when src.application_id is null then ''NUR_ZIEL''' ||
+                '             when tgt.application_id is null then ''NUR_QUELLE''' ||
+                '             when src.source_count>1 then ''MEHRDEUTIG''' ||
+                '             when nvl(src.pages,-1)=nvl(tgt.pages,-1) then ''OK'' else ''DIFF'' end,' ||
+                '        case when src.source_count>1 then ''App auf mehreren Quellen gefunden.'' end' ||
+                ' from src full outer join tgt on tgt.application_id=src.application_id' ||
+                '  and tgt.application_name=src.application_name order by 1';
+            print_section(
+                'APEX-Anwendungen',
+                l_sql,
+                'APEX App',
+                'Quelle(n) Workspace / Seiten',
+                'Ziel Workspace / Seiten',
+                'Ergebnis',
+                'Hinweis');
+        else
+            l_sql :=
+                'select ''APEX Metadaten'',''-'',''-'',''INFO'',' ||
+                '''Keine lesbaren APEX Dictionary Views auf den Quellen gefunden.'' from dual';
+            print_section(
+                'APEX-Anwendungen',
+                l_sql,
+                'APEX App',
+                'Quelle(n) Workspace / Seiten',
+                'Ziel Workspace / Seiten',
+                'Ergebnis',
+                'Hinweis');
+        end if;
 
         l_sql :=
             'select ''MULTI_SOURCE'',''VOSTAT.PRD'',''Zielmetadaten'',''PRUEFEN'',' ||
@@ -1156,6 +1176,15 @@ begin
         'Hinweis');
 
     print_runtime_risks(l_src_link, l_tgt_link, l_app_filter);
+exception
+    when others then
+        apex_debug.error(
+            'Live Vergleich rendering failed: %s / %s',
+            sqlerrm,
+            dbms_utility.format_error_backtrace);
+        htp.p('<div class="t-Alert t-Alert--danger"><strong>Live Vergleich:</strong> ' ||
+              esc(sqlerrm) || '<br><span class="mt-muted">' ||
+              esc(dbms_utility.format_error_backtrace) || '</span></div>');
 end;~')),
         p_plug_display_condition_type => 'ITEM_IS_NOT_NULL',
         p_plug_display_when_condition => 'P9_COMPARE_OK');
