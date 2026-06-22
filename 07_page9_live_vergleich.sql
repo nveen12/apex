@@ -297,19 +297,10 @@ begin
             .mt-live-table tbody tr:hover{background:#eef6ff}
             .mt-live-table tr:last-child td{border-bottom:0}
             .mt-live-table td:first-child{font-family:Consolas,''Courier New'',monospace}
-            .mt-invalid-grid{display:flex!important;gap:1rem;width:100%;max-width:1600px;
-                align-items:flex-start}
-            .mt-invalid-grid>style{display:none!important}
-            .mt-invalid-grid>.mt-live-section{flex:1 1 0;width:0;margin:1rem 0 2rem 0;
-                max-width:none;min-width:0}
-            .mt-invalid-grid .mt-live-table th,.mt-invalid-grid .mt-live-table td{
-                white-space:normal;overflow-wrap:anywhere}
-            .mt-invalid-grid .mt-live-table th:nth-child(n+3),
-            .mt-invalid-grid .mt-live-table td:nth-child(n+3){display:none}
-            @media (max-width:900px){
-                .mt-invalid-grid{display:block!important}
-                .mt-invalid-grid>.mt-live-section{width:100%}
-            }
+            .mt-invalid-pair .mt-live-table th:nth-child(n+3),
+            .mt-invalid-pair .mt-live-table td:nth-child(n+3){display:none}
+            .mt-invalid-pair .mt-live-table th,.mt-invalid-pair .mt-live-table td{
+                width:50%;white-space:normal;overflow-wrap:anywhere}
             .mt-status-ok{color:#166534;font-weight:700}
             .mt-status-diff,.mt-status-invalid,.mt-status-fehler,.mt-status-nur-quelle,.mt-status-nur-ziel,
             .mt-status-page-count-diff,.mt-status-nur-quelle-page,.mt-status-nur-ziel-page{color:#b42318;font-weight:700}
@@ -745,48 +736,38 @@ begin
         'Ziel Status',
         'Fehlerdetails');
 
-    htp.p('<div class="mt-invalid-grid">');
-
     l_sql :=
-        'select owner||''.''||object_name,' ||
-        '       object_type,' ||
+        'with src as (' ||
+        '  select owner||''.''||object_name||'' (''||object_type||'')'' element,' ||
+        '         row_number() over (order by owner, object_type, object_name) rn' ||
+        '    from all_objects@' || l_src_link ||
+        '   where ' || l_src_filter ||
+        '     and object_name not like ''BIN$%''' ||
+        '     and status <> ''VALID''' ||
+        '), tgt as (' ||
+        '  select owner||''.''||object_name||'' (''||object_type||'')'' element,' ||
+        '         row_number() over (order by owner, object_type, object_name) rn' ||
+        '    from all_objects@' || l_tgt_link ||
+        '   where ' || l_tgt_filter ||
+        '     and object_name not like ''BIN$%''' ||
+        '     and status <> ''VALID''' ||
+        ')' ||
+        'select src.element,' ||
+        '       tgt.element,' ||
         '       null,' ||
         '       null,' ||
         '       null' ||
-        '  from all_objects@' || l_src_link ||
-        ' where ' || l_src_filter ||
-        '   and object_name not like ''BIN$%''' ||
-        '   and status <> ''VALID''' ||
-        ' order by owner, object_type, object_name';
+        '  from src full outer join tgt on tgt.rn = src.rn' ||
+        ' order by coalesce(src.rn, tgt.rn)';
+    htp.p('<div class="mt-invalid-pair">');
     print_section(
+        'Ungueltige Objekte',
+        l_sql,
         'Quelle ungueltig',
-        l_sql,
-        'Objekt',
-        'Objekttyp',
-        '',
-        '',
-        '');
-
-    l_sql :=
-        'select owner||''.''||object_name,' ||
-        '       object_type,' ||
-        '       null,' ||
-        '       null,' ||
-        '       null' ||
-        '  from all_objects@' || l_tgt_link ||
-        ' where ' || l_tgt_filter ||
-        '   and object_name not like ''BIN$%''' ||
-        '   and status <> ''VALID''' ||
-        ' order by owner, object_type, object_name';
-    print_section(
         'Ziel ungueltig',
-        l_sql,
-        'Objekt',
-        'Objekttyp',
         '',
         '',
         '');
-
     htp.p('</div>');
 
     l_sql :=
