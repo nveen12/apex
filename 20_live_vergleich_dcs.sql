@@ -18,6 +18,7 @@ declare
     l_region_help  number := 91200000000000020;
     l_region_sum   number := 91200000000000030;
     l_region_detail number := 91200000000000040;
+    l_region_action number := 91200000000000045;
     l_nav_found    boolean := false;
 begin
     select workspace_id
@@ -179,6 +180,26 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
         p_button_position         => 'BELOW_BOX',
         p_button_alignment        => 'LEFT',
         p_icon_css_classes        => 'fa-search');
+
+    -- Fallback action button. Some imported Universal Theme/template
+    -- combinations do not visibly render the normal region button slot.
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(l_region_action),
+        p_plug_name               => 'DCS Analyse Aktion',
+        p_region_template_options => '#DEFAULT#',
+        p_plug_template           => wwv_flow_imp.id(10818657374759767),
+        p_plug_display_sequence   => 15,
+        p_plug_display_point      => 'BODY',
+        p_plug_source             => q'~<div class="mt-dcs-actions">
+  <button type="button" class="t-Button t-Button--hot" onclick="apex.submit('ANALYZE_DCS');">
+    <span class="t-Icon fa fa-search" aria-hidden="true"></span>
+    <span class="t-Button-label">DCS Invalide analysieren</span>
+  </button>
+</div>~',
+        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'HTML',
+            'show_line_breaks', 'N')).to_clob);
 
     wwv_flow_imp_page.create_report_region(
         p_id                         => wwv_flow_imp.id(l_region_sum),
