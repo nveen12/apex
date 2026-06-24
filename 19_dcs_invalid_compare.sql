@@ -321,6 +321,80 @@ create or replace package body mt_dcs_invalid_pkg as
         end if;
     end;
 
+    procedure parse_invalid_line(
+        p_line        in varchar2,
+        p_schema      out varchar2,
+        p_object_name out varchar2,
+        p_object_type out varchar2,
+        p_is_data     out boolean,
+        p_is_continue out boolean
+    ) is
+        l_line        varchar2(4000) := replace(replace(p_line, '"'), '`');
+        l_trim        varchar2(4000) := trim(l_line);
+        l_after_owner varchar2(4000);
+    begin
+        p_schema      := null;
+        p_object_name := null;
+        p_object_type := null;
+        p_is_data     := false;
+        p_is_continue := false;
+
+        if l_trim is null
+           or regexp_like(l_trim, '^OWNER[[:space:]]+OBJECT_TYPE', 'i')
+           or regexp_like(l_trim, '^[-[:space:]]+$')
+           or regexp_like(l_trim, '^[0-9]+[[:space:]]+(Zeilen|rows)', 'i') then
+            return;
+        end if;
+
+        -- SQL*Plus wraps long OBJECT_NAME values onto the next indented line.
+        if regexp_like(l_line, '^[[:space:]]+[A-Za-z0-9_$#]+[[:space:]]*$') then
+            p_object_name := l_trim;
+            p_is_continue := true;
+            return;
+        end if;
+
+        -- SQL*Plus fixed-column output:
+        -- OWNER          OBJECT_TYPE             OBJECT_NAME
+        p_schema := regexp_substr(
+            l_line,
+            '^[[:space:]]*([A-Za-z][A-Za-z0-9_$#]{0,127})[[:space:]]+',
+            1, 1, 'i', 1);
+
+        if p_schema is not null then
+            l_after_owner := regexp_replace(
+                l_line,
+                '^[[:space:]]*[A-Za-z][A-Za-z0-9_$#]{0,127}[[:space:]]+',
+                '',
+                1, 1, 'i');
+            p_object_type := regexp_substr(
+                l_after_owner,
+                '^(MATERIALIZED VIEW|PACKAGE BODY|JAVA SOURCE|JAVA CLASS|TYPE BODY|DATABASE LINK|PROCEDURE|FUNCTION|PACKAGE|TRIGGER|SYNONYM|SEQUENCE|INDEX|TABLE|VIEW|TYPE)[[:space:]]+',
+                1, 1, 'i', 1);
+
+            if p_object_type is not null then
+                p_object_name := trim(regexp_replace(
+                    l_after_owner,
+                    '^(MATERIALIZED VIEW|PACKAGE BODY|JAVA SOURCE|JAVA CLASS|TYPE BODY|DATABASE LINK|PROCEDURE|FUNCTION|PACKAGE|TRIGGER|SYNONYM|SEQUENCE|INDEX|TABLE|VIEW|TYPE)[[:space:]]+',
+                    '',
+                    1, 1, 'i'));
+                p_is_data := p_object_name is not null;
+                return;
+            end if;
+        end if;
+
+        -- Fallback for simple pasted lines containing SCHEMA.OBJECT_NAME.
+        p_schema := regexp_substr(
+            l_line,
+            '(^|[^A-Za-z0-9_$#])([A-Za-z][A-Za-z0-9_$#]{0,127})\.([A-Za-z][A-Za-z0-9_$#]{0,127})',
+            1, 1, 'i', 2);
+        p_object_name := regexp_substr(
+            l_line,
+            '(^|[^A-Za-z0-9_$#])([A-Za-z][A-Za-z0-9_$#]{0,127})\.([A-Za-z][A-Za-z0-9_$#]{0,127})',
+            1, 1, 'i', 3);
+        p_object_type := object_type_from_line(l_line);
+        p_is_data := p_schema is not null and p_object_name is not null;
+    end;
+
     function analyze(
         p_raw_text   in clob,
         p_created_by in varchar2 default user
@@ -337,6 +411,34 @@ create or replace package body mt_dcs_invalid_pkg as
         l_schema       varchar2(128);
         l_object_name  varchar2(128);
         l_object_type  varchar2(50);
+        l_is_data      boolean;
+        l_is_continue  boolean;
+        l_pending      boolean := false;
+        l_p_schema     varchar2(128);
+        l_p_object     varchar2(128);
+        l_p_type       varchar2(50);
+        l_p_raw        varchar2(4000);
+        l_p_line_no    number;
+
+        procedure flush_pending is
+        begin
+            if l_pending then
+                l_parsed_count := l_parsed_count + 1;
+                compare_one_object(
+                    p_run_id      => l_run_id,
+                    p_line_no     => l_p_line_no,
+                    p_raw_line    => l_p_raw,
+                    p_schema      => l_p_schema,
+                    p_object_name => l_p_object,
+                    p_object_type => l_p_type);
+                l_pending := false;
+                l_p_schema := null;
+                l_p_object := null;
+                l_p_type := null;
+                l_p_raw := null;
+                l_p_line_no := null;
+            end if;
+        end;
     begin
         l_run_id := seq_dcs_invalid_run_id.nextval;
         l_text := replace(replace(p_raw_text, chr(13) || chr(10), chr(10)), chr(13), chr(10));
@@ -368,17 +470,31 @@ create or replace package body mt_dcs_invalid_pkg as
             end if;
 
             l_line_count := l_line_count + 1;
-            l_schema := regexp_substr(
-                replace(replace(l_line, '"'), '`'),
-                '(^|[^A-Za-z0-9_$#])([A-Za-z][A-Za-z0-9_$#]{0,127})\.([A-Za-z][A-Za-z0-9_$#]{0,127})',
-                1, 1, 'i', 2);
-            l_object_name := regexp_substr(
-                replace(replace(l_line, '"'), '`'),
-                '(^|[^A-Za-z0-9_$#])([A-Za-z][A-Za-z0-9_$#]{0,127})\.([A-Za-z][A-Za-z0-9_$#]{0,127})',
-                1, 1, 'i', 3);
-            l_object_type := object_type_from_line(l_line);
+            parse_invalid_line(
+                p_line        => l_line,
+                p_schema      => l_schema,
+                p_object_name => l_object_name,
+                p_object_type => l_object_type,
+                p_is_data     => l_is_data,
+                p_is_continue => l_is_continue);
 
-            if l_schema is null or l_object_name is null then
+            if l_is_continue then
+                if l_pending then
+                    l_p_object := substr(l_p_object || l_object_name, 1, 128);
+                    l_p_raw := substr(l_p_raw || ' ' || trim(l_line), 1, 4000);
+                end if;
+            elsif l_is_data then
+                flush_pending;
+                l_pending := true;
+                l_p_schema := upper(l_schema);
+                l_p_object := upper(l_object_name);
+                l_p_type := upper(l_object_type);
+                l_p_raw := l_line;
+                l_p_line_no := l_line_no;
+            elsif not regexp_like(trim(l_line), '^OWNER[[:space:]]+OBJECT_TYPE', 'i')
+                  and not regexp_like(trim(l_line), '^[-[:space:]]+$')
+                  and not regexp_like(trim(l_line), '^[0-9]+[[:space:]]+(Zeilen|rows)', 'i') then
+                flush_pending;
                 add_result(
                     p_run_id             => l_run_id,
                     p_line_no            => l_line_no,
@@ -392,18 +508,11 @@ create or replace package body mt_dcs_invalid_pkg as
                     p_source_object_type => null,
                     p_source_status      => null,
                     p_result_status      => 'PARSE_FEHLER',
-                    p_hinweis            => 'Keine OWNER.OBJECT-Struktur in dieser Zeile erkannt.');
-            else
-                l_parsed_count := l_parsed_count + 1;
-                compare_one_object(
-                    p_run_id      => l_run_id,
-                    p_line_no     => l_line_no,
-                    p_raw_line    => l_line,
-                    p_schema      => l_schema,
-                    p_object_name => l_object_name,
-                    p_object_type => l_object_type);
+                    p_hinweis            => 'Keine OWNER/OBJECT_TYPE/OBJECT_NAME- oder OWNER.OBJECT-Struktur erkannt.');
             end if;
         end loop;
+
+        flush_pending;
 
         update mt_dcs_invalid_run r
         set    line_count   = l_line_count,

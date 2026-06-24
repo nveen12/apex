@@ -125,7 +125,7 @@ begin
         p_plug_display_point      => 'BODY',
         p_plug_source             => q'~<div class="mt-dcs-help">
 <strong>DCS Invalid-Objekte analysieren</strong>
-Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt werden Zeilen mit <code>SCHEMA.OBJECT_NAME</code>. Die App sucht diese Objekte in allen aktiven PROD-Quellen und zeigt, ob sie dort gueltig, ungueltig oder nicht vorhanden sind.
+Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQL*Plus-Ausgabe mit <code>OWNER OBJECT_TYPE OBJECT_NAME</code> sowie einfache Zeilen mit <code>SCHEMA.OBJECT_NAME</code>. Die App sucht diese Objekte in allen aktiven PROD-Quellen und zeigt, ob sie dort gueltig, ungueltig oder nicht vorhanden sind.
 </div>~',
         p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
             'expand_shortcuts', 'N',
