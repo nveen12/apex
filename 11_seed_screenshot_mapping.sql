@@ -308,7 +308,8 @@ declare
         p_tgt_cdb         in varchar2,
         p_tgt_pdb         in varchar2,
         p_service_name    in varchar2,
-        p_tgt_dblink      in varchar2
+        p_tgt_dblink      in varchar2,
+        p_src_service_name in varchar2 default null
     ) is
     begin
         ensure_fv(p_fv_name, p_fv_code, p_schema_name);
@@ -316,7 +317,7 @@ declare
         ensure_server(p_tgt_host, 'WORKBENCH', null);
         ensure_cdb(p_src_host, p_src_cdb);
         ensure_cdb(p_tgt_host, p_tgt_cdb);
-        ensure_pdb(p_src_host, p_src_cdb, p_src_pdb, p_service_name, p_src_dblink);
+        ensure_pdb(p_src_host, p_src_cdb, p_src_pdb, nvl(p_src_service_name, p_service_name), p_src_dblink);
         ensure_pdb(p_tgt_host, p_tgt_cdb, p_tgt_pdb, p_service_name, p_tgt_dblink);
         ensure_mapping(p_fv_code, p_src_host, p_src_cdb, p_src_pdb, 'QUELLE');
         ensure_mapping(p_fv_code, p_tgt_host, p_tgt_cdb, p_tgt_pdb, 'WORKBENCH');
@@ -438,10 +439,12 @@ begin
     -- ALV-Migration.ods inventory provides the official values.
     add_row('STAPO_VO', 'STAPO -> VO', 'STAPO_VO',
             'rzhs406.ofd-h.de', 'STAPOPDB', 'stapopdb.PROD', 'rzhs406_stapopdb_prod',
-            'rzhs442', 'VO', 'voprod.PROD', 'VOSTAT.PRD', 'rzhs442_vostat_prd');
+            'rzhs442', 'VO', 'voprod.PROD', 'VOSTAT.PRD', 'rzhs442_vostat_prd',
+            'stapopdb.PROD');
     add_row('STAPO_VO', 'STAPO -> VO', 'STAPO_VO',
             'rzhs407', 'VOLLSTRP', 'VOLLSTRP.PROD', 'rzhs407_vollstrp_prod',
-            'rzhs442', 'VO', 'voprod.PROD', 'VOSTAT.PRD', 'rzhs442_vostat_prd');
+            'rzhs442', 'VO', 'voprod.PROD', 'VOSTAT.PRD', 'rzhs442_vostat_prd',
+            'VOLLSTRP.PROD');
 
     commit;
 end;
