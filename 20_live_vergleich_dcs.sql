@@ -77,6 +77,9 @@ begin
 .mt-dcs-help strong{display:block;margin-bottom:4px}
 .mt-dcs-actions{display:flex;gap:8px;margin-top:8px}
 .mt-dcs-actions .t-Button{min-width:120px}
+.mt-dcs-rule-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:10px 0 18px}
+.mt-dcs-rule-form label{display:flex;flex-direction:column;gap:3px;font-weight:600}
+.mt-dcs-rule-form select{min-width:260px;max-width:520px}
 .mt-dcs-report .t-Report-report{font-size:.86rem}
 .mt-dcs-result-wrap{overflow:auto;max-width:1500px}
 .mt-dcs-result-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:1120px}
@@ -84,6 +87,7 @@ begin
 .mt-dcs-result-table td:last-child{white-space:normal;min-width:320px;max-width:520px}
 .mt-dcs-status-source-valid-dcs-invalid{color:#b42318;font-weight:700}
 .mt-dcs-status-source-invalid-dcs-invalid{color:#7a4b00;font-weight:700}
+.mt-dcs-status-source-not-configured{color:#8250df;font-weight:700}
 .mt-dcs-status-not-found-in-prod-source,
 .mt-dcs-status-source-link-error,
 .mt-dcs-status-parse-fehler{color:#b42318;font-weight:700}
@@ -114,6 +118,17 @@ begin
   hideOldNavEntries();
   document.addEventListener("apexreadyend", hideOldNavEntries);
   window.setTimeout(hideOldNavEntries, 300);
+  window.mtSaveDcsSourceRule = function(){
+    var schema = document.getElementById("MT_DCS_RULE_SCHEMA");
+    var link = document.getElementById("MT_DCS_RULE_DBLINK");
+    if (!schema || !link || !schema.value || !link.value) {
+      apex.message.alert("Bitte DCS-Schema und PROD-Quelle auswaehlen.");
+      return;
+    }
+    apex.item("P12_RULE_SCHEMA").setValue(schema.value);
+    apex.item("P12_RULE_DBLINK").setValue(link.value);
+    apex.submit("SAVE_DCS_RULE");
+  };
 })();
 </script>~',
         p_attributes            => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
@@ -130,7 +145,7 @@ begin
         p_plug_display_point      => 'BODY',
         p_plug_source             => q'~<div class="mt-dcs-help">
 <strong>DCS Invalid-Objekte analysieren</strong>
-Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQL*Plus-Ausgabe mit <code>OWNER OBJECT_TYPE OBJECT_NAME</code> sowie einfache Zeilen mit <code>SCHEMA.OBJECT_NAME</code>. Die App sucht diese Objekte in allen aktiven PROD-Quellen und zeigt, ob sie dort gueltig, ungueltig oder nicht vorhanden sind.
+Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQL*Plus-Ausgabe mit <code>OWNER OBJECT_TYPE OBJECT_NAME</code> sowie einfache Zeilen mit <code>SCHEMA.OBJECT_NAME</code>. Zuerst das PROD-Quellinventar aktualisieren. Danach ordnet die App DCS-Schemas automatisch anhand des lokalen Inventars einer PROD-Quelle zu. Nur mehrdeutige oder fehlende Schemas brauchen eine manuelle Quellregel.
 </div>~',
         p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
             'expand_shortcuts', 'N',
@@ -155,6 +170,24 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
         p_id               => wwv_flow_imp.id(91200000000000011),
         p_name             => 'P12_RUN_ID',
         p_item_sequence    => 10,
+        p_item_plug_id     => wwv_flow_imp.id(l_region_input),
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(91200000000000014),
+        p_name             => 'P12_RULE_SCHEMA',
+        p_item_sequence    => 12,
+        p_item_plug_id     => wwv_flow_imp.id(l_region_input),
+        p_display_as       => 'NATIVE_HIDDEN',
+        p_protection_level => 'S',
+        p_attribute_01     => 'Y');
+
+    wwv_flow_imp_page.create_page_item(
+        p_id               => wwv_flow_imp.id(91200000000000015),
+        p_name             => 'P12_RULE_DBLINK',
+        p_item_sequence    => 14,
         p_item_plug_id     => wwv_flow_imp.id(l_region_input),
         p_display_as       => 'NATIVE_HIDDEN',
         p_protection_level => 'S',
@@ -195,6 +228,10 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
         p_plug_display_sequence   => 15,
         p_plug_display_point      => 'BODY',
         p_plug_source             => q'~<div class="mt-dcs-actions">
+  <button type="button" class="t-Button" onclick="apex.submit('REFRESH_DCS_INVENTORY');">
+    <span class="t-Icon fa fa-refresh" aria-hidden="true"></span>
+    <span class="t-Button-label">Quellinventar aktualisieren</span>
+  </button>
   <button type="button" class="t-Button t-Button--hot" onclick="apex.submit('ANALYZE_DCS');">
     <span class="t-Icon fa fa-search" aria-hidden="true"></span>
     <span class="t-Button-label">DCS Invalide analysieren</span>
@@ -235,7 +272,121 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
     begin
         htp.p('</tbody></table></div>');
     end;
+
+    procedure render_inventory_status is
+        l_ok_schemas number := 0;
+        l_links      number := 0;
+        l_errors     number := 0;
+        l_refreshed  varchar2(30);
+    begin
+        select count(distinct case when refresh_status = 'OK' then schema_name end),
+               count(distinct case when refresh_status = 'OK' then source_dblink_name end),
+               count(case when refresh_status = 'LINK_ERROR' then 1 end),
+               to_char(max(refreshed_at), 'DD.MM.YYYY HH24:MI:SS')
+        into   l_ok_schemas, l_links, l_errors, l_refreshed
+        from   mt_source_schema_inventory;
+
+        if l_refreshed is null then
+            htp.p('<div class="t-Alert t-Alert--warning">PROD-Quellinventar ist noch leer. Bitte zuerst <strong>Quellinventar aktualisieren</strong> klicken.</div>');
+        else
+            htp.p('<div class="t-Alert t-Alert--info">PROD-Quellinventar: ' ||
+                  l_ok_schemas || ' Schema(s) aus ' || l_links ||
+                  ' DB-Link(s), aktualisiert am ' || esc(l_refreshed) ||
+                  case when l_errors > 0 then '. Fehlerhafte DB-Links: ' || l_errors else '' end ||
+                  '.</div>');
+        end if;
+    end;
+
+    procedure render_rule_helper is
+        l_missing_count number := 0;
+        l_link_count    number := 0;
+    begin
+        select count(distinct parsed_schema)
+        into   l_missing_count
+        from   mt_dcs_invalid_result
+        where  run_id = :P12_RUN_ID
+        and    result_status in ('SOURCE_NOT_CONFIGURED', 'SOURCE_AMBIGUOUS');
+
+        if l_missing_count = 0 then
+            return;
+        end if;
+
+        select count(*)
+        into   l_link_count
+        from (
+            select distinct p.dblink_name
+            from   mt_fv_pdb_mapping m
+            join   mt_pdb p on p.pdb_id = m.pdb_id
+            where  m.mapping_role = 'QUELLE'
+            and    nvl(m.aktiv, 'J') = 'J'
+            and    nvl(p.tier, '-') = 'PROD'
+            and    p.dblink_name is not null
+            and    p.dblink_name not like '##%##'
+            and    exists (
+                       select 1
+                       from   user_db_links l
+                       where  l.db_link = upper(p.dblink_name)
+                       or     l.db_link like upper(p.dblink_name) || '.%'
+                   )
+        );
+
+        htp.p('<h3>Quellzuordnung pruefen</h3>');
+        htp.p('<div class="t-Alert t-Alert--warning">Diese DCS-Schemas konnten nicht eindeutig automatisch zugeordnet werden. Bitte Schema auswaehlen, korrekten PROD-DB-Link setzen und neu analysieren.</div>');
+        htp.p('<div class="mt-dcs-rule-form">');
+        htp.p('<label>DCS Schema<select id="MT_DCS_RULE_SCHEMA">');
+        htp.p('<option value="">- Schema waehlen -</option>');
+        for s in (
+            select parsed_schema, count(*) as anzahl
+            from   mt_dcs_invalid_result
+            where  run_id = :P12_RUN_ID
+            and    result_status in ('SOURCE_NOT_CONFIGURED', 'SOURCE_AMBIGUOUS')
+            group  by parsed_schema
+            order  by parsed_schema
+        ) loop
+            htp.p('<option value="' || esc(s.parsed_schema) || '">' ||
+                  esc(s.parsed_schema) || ' (' || s.anzahl || ' Objekt(e))</option>');
+        end loop;
+        htp.p('</select></label>');
+
+        htp.p('<label>PROD Quelle<select id="MT_DCS_RULE_DBLINK">');
+        htp.p('<option value="">- PROD-Quelle waehlen -</option>');
+        for l in (
+            select distinct
+                   upper(p.dblink_name) as dblink_name,
+                   max(src.hostname || ' / ' || nvl(p.service_name, p.pdb_name)) as label
+            from   mt_fv_pdb_mapping m
+            join   mt_pdb p      on p.pdb_id = m.pdb_id
+            join   mt_cdb c      on c.cdb_id = p.cdb_id
+            join   mt_server src on src.server_id = c.server_id
+            where  m.mapping_role = 'QUELLE'
+            and    nvl(m.aktiv, 'J') = 'J'
+            and    nvl(p.tier, '-') = 'PROD'
+            and    p.dblink_name is not null
+            and    p.dblink_name not like '##%##'
+            and    exists (
+                       select 1
+                       from   user_db_links u
+                       where  u.db_link = upper(p.dblink_name)
+                       or     u.db_link like upper(p.dblink_name) || '.%'
+                   )
+            group  by upper(p.dblink_name)
+            order  by label
+        ) loop
+            htp.p('<option value="' || esc(l.dblink_name) || '">' ||
+                  esc(l.label) || ' [' || esc(l.dblink_name) || ']</option>');
+        end loop;
+        htp.p('</select></label>');
+
+        htp.p('<button type="button" class="t-Button t-Button--hot" onclick="mtSaveDcsSourceRule()">Quellregel speichern und neu analysieren</button>');
+        htp.p('</div>');
+
+        if l_link_count = 0 then
+            htp.p('<div class="t-Alert t-Alert--danger">Keine nutzbaren PROD-DB-Links in USER_DB_LINKS gefunden.</div>');
+        end if;
+    end;
 begin
+    render_inventory_status;
+
     if :P12_RUN_ID is null then
         htp.p('<div class="t-Alert t-Alert--info">Paste DCS invalid-object text and click <strong>DCS Invalide analysieren</strong>.</div>');
         return;
@@ -276,6 +427,8 @@ begin
     end if;
     table_end;
 
+    render_rule_helper;
+
     htp.p('<br>');
     l_rows := 0;
     table_begin(
@@ -295,6 +448,7 @@ begin
                hinweis
         from   mt_dcs_invalid_result
         where  run_id = :P12_RUN_ID
+        and    result_status not in ('SOURCE_NOT_CONFIGURED', 'SOURCE_AMBIGUOUS')
         order  by case result_status
                     when 'SOURCE_VALID_DCS_INVALID' then 1
                     when 'SOURCE_INVALID_DCS_INVALID' then 2
@@ -342,7 +496,24 @@ end;~',
         p_process_name           => 'DCS Invalid-Liste analysieren',
         p_process_sql_clob       => wwv_flow_string.join(wwv_flow_t_varchar2(
             'begin',
-            '    if apex_application.g_request = ''ANALYZE_DCS'' then',
+            '    if apex_application.g_request = ''REFRESH_DCS_INVENTORY'' then',
+            '        mt_dcs_invalid_pkg.refresh_source_inventory;',
+            '    elsif apex_application.g_request = ''SAVE_DCS_RULE'' then',
+            '        merge into mt_dcs_schema_source_rule r',
+            '        using (select upper(:P12_RULE_SCHEMA) as dcs_schema, upper(:P12_RULE_DBLINK) as source_dblink_name from dual) src',
+            '        on (r.dcs_schema = src.dcs_schema and r.source_dblink_name = src.source_dblink_name)',
+            '        when matched then update set r.aktiv = ''J'', r.kommentar = ''Manuell in APEX gesetzt''',
+            '        when not matched then insert (dcs_schema, source_dblink_name, aktiv, kommentar)',
+            '        values (src.dcs_schema, src.source_dblink_name, ''J'', ''Manuell in APEX gesetzt'');',
+            '        update mt_dcs_schema_source_rule',
+            '        set    aktiv = ''N''',
+            '        where  dcs_schema = upper(:P12_RULE_SCHEMA)',
+            '        and    source_dblink_name <> upper(:P12_RULE_DBLINK);',
+            '        commit;',
+            '        :P12_RUN_ID := mt_dcs_invalid_pkg.analyze(',
+            '            p_raw_text   => :P12_INVALID_TEXT,',
+            '            p_created_by => nvl(v(''APP_USER''), user));',
+            '    elsif apex_application.g_request = ''ANALYZE_DCS'' then',
             '        :P12_RUN_ID := mt_dcs_invalid_pkg.analyze(',
             '            p_raw_text   => :P12_INVALID_TEXT,',
             '            p_created_by => nvl(v(''APP_USER''), user));',

@@ -10,7 +10,8 @@ whenever sqlerror exit sql.sqlcode rollback
 -- Purpose:
 --   Dataport/DCS target is not queried live here. Instead, paste the DCS invalid
 --   object list into Page 12. The package parses OWNER.OBJECT entries and
---   checks those objects against all active PROD source DB links.
+--   compares them against the resolved PROD source from local source-schema
+--   inventory. The inventory is refreshed separately from active PROD DB links.
 --------------------------------------------------------------------------------
 
 declare
@@ -29,6 +30,35 @@ begin
                 increment by 1
                 nocache
                 nocycle
+        ]';
+    end if;
+end;
+/
+
+declare
+    l_count number;
+begin
+    select count(*)
+    into   l_count
+    from   all_tables
+    where  owner      = sys_context('USERENV', 'CURRENT_SCHEMA')
+    and    table_name = 'MT_SOURCE_SCHEMA_INVENTORY';
+
+    if l_count = 0 then
+        execute immediate q'[
+            create table mt_source_schema_inventory (
+                source_dblink_name varchar2(128) not null,
+                source_host        varchar2(255),
+                source_service     varchar2(255),
+                schema_name        varchar2(128),
+                refresh_status     varchar2(30)  default 'OK' not null,
+                error_message      varchar2(2000),
+                refreshed_at       date          default sysdate not null,
+                constraint ck_mt_source_schema_inv_status
+                    check (refresh_status in ('OK', 'LINK_ERROR')),
+                constraint uq_mt_source_schema_inventory
+                    unique (source_dblink_name, schema_name, refresh_status)
+            )
         ]';
     end if;
 end;
@@ -126,6 +156,7 @@ begin
                         'SOURCE_INVALID_DCS_INVALID',
                         'NOT_FOUND_IN_PROD_SOURCE',
                         'SOURCE_NOT_CONFIGURED',
+                        'SOURCE_AMBIGUOUS',
                         'SOURCE_LINK_ERROR',
                         'PARSE_FEHLER'
                     ))
@@ -155,6 +186,7 @@ begin
                 'SOURCE_INVALID_DCS_INVALID',
                 'NOT_FOUND_IN_PROD_SOURCE',
                 'SOURCE_NOT_CONFIGURED',
+                'SOURCE_AMBIGUOUS',
                 'SOURCE_LINK_ERROR',
                 'PARSE_FEHLER'
             ))
@@ -195,6 +227,8 @@ comment on table mt_dcs_invalid_result is
     'Parsed DCS invalid objects compared against active PROD source DB links.';
 comment on table mt_dcs_schema_source_rule is
     'Optional DCS schema -> PROD source DB-link rules. Prevents broad DB-link scans and ORA-02020.';
+comment on table mt_source_schema_inventory is
+    'Cached schema inventory from active PROD source DB links. Used to route DCS invalid-object comparisons without broad live scans.';
 
 merge into mt_dcs_schema_source_rule r
 using (
@@ -248,6 +282,8 @@ when not matched then
 commit;
 
 create or replace package mt_dcs_invalid_pkg authid definer as
+    procedure refresh_source_inventory;
+
     function analyze(
         p_raw_text   in clob,
         p_created_by in varchar2 default user
@@ -259,6 +295,37 @@ create or replace package body mt_dcs_invalid_pkg as
 
     type t_cache is table of varchar2(1) index by varchar2(4000);
     g_schema_link_cache t_cache;
+
+    function is_app_schema(p_schema in varchar2) return boolean is
+        l_schema varchar2(128) := upper(p_schema);
+    begin
+        if l_schema is null then
+            return false;
+        end if;
+
+        if l_schema in (
+            'ANONYMOUS', 'APEX_PUBLIC_USER', 'APPQOSSYS', 'AUDSYS',
+            'CTXSYS', 'DBSFWUSER', 'DBSNMP', 'DIP', 'DVF', 'DVSYS',
+            'GGSYS', 'GSMADMIN_INTERNAL', 'GSMCATUSER', 'GSMUSER',
+            'LBACSYS', 'MDSYS', 'OJVMSYS', 'OLAPSYS', 'ORACLE_OCM',
+            'ORDDATA', 'ORDPLUGINS', 'ORDSYS', 'OUTLN', 'REMOTE_SCHEDULER_AGENT',
+            'SI_INFORMTN_SCHEMA', 'SYS', 'SYS$UMF', 'SYSBACKUP', 'SYSDG',
+            'SYSKM', 'SYSRAC', 'SYSTEM', 'WMSYS', 'XDB', 'XS$NULL'
+        ) then
+            return false;
+        end if;
+
+        if l_schema like 'APEX\_%' escape '\'
+           or l_schema like 'FLOWS\_%' escape '\'
+           or l_schema like 'ORDS\_%' escape '\'
+           or l_schema like 'OAUTH%'
+           or l_schema like 'AQ$%'
+           or l_schema like 'MLOG$%' then
+            return false;
+        end if;
+
+        return true;
+    end;
 
     procedure close_db_link(p_link in varchar2) is
     begin
@@ -297,6 +364,79 @@ create or replace package body mt_dcs_invalid_pkg as
             close_db_link(p_link);
             raise;
     end;
+
+    procedure refresh_source_inventory is
+        l_link   varchar2(261);
+        l_sql    varchar2(32767);
+        l_schema varchar2(128);
+        l_rc     sys_refcursor;
+    begin
+        delete from mt_source_schema_inventory;
+        commit;
+
+        for s in (
+            select distinct
+                   upper(p.dblink_name) as dblink_name,
+                   src.hostname as source_host,
+                   nvl(p.service_name, p.pdb_name) as source_service
+            from   mt_fv_pdb_mapping m
+            join   mt_pdb p      on p.pdb_id = m.pdb_id
+            join   mt_cdb c      on c.cdb_id = p.cdb_id
+            join   mt_server src on src.server_id = c.server_id
+            where  m.mapping_role = 'QUELLE'
+            and    nvl(m.aktiv, 'J') = 'J'
+            and    nvl(p.tier, '-') = 'PROD'
+            and    p.dblink_name is not null
+            and    p.dblink_name not like '##%##'
+            and    exists (
+                       select 1
+                       from   user_db_links l
+                       where  l.db_link = upper(p.dblink_name)
+                       or     l.db_link like upper(p.dblink_name) || '.%'
+                   )
+            order  by src.hostname, nvl(p.service_name, p.pdb_name), upper(p.dblink_name)
+        ) loop
+            begin
+                l_link := dbms_assert.simple_sql_name(s.dblink_name);
+                l_sql := 'select username from all_users@' || l_link || ' order by username';
+                open l_rc for l_sql;
+                loop
+                    fetch l_rc into l_schema;
+                    exit when l_rc%notfound;
+
+                    if is_app_schema(l_schema) then
+                        begin
+                            insert into mt_source_schema_inventory (
+                                source_dblink_name, source_host, source_service,
+                                schema_name, refresh_status, refreshed_at)
+                            values (
+                                upper(s.dblink_name), s.source_host, s.source_service,
+                                upper(l_schema), 'OK', sysdate);
+                        exception
+                            when dup_val_on_index then
+                                null;
+                        end;
+                    end if;
+                end loop;
+                close l_rc;
+                close_db_link(l_link);
+                commit;
+            exception
+                when others then
+                    if l_rc%isopen then
+                        close l_rc;
+                    end if;
+                    close_db_link(s.dblink_name);
+                    insert into mt_source_schema_inventory (
+                        source_dblink_name, source_host, source_service,
+                        schema_name, refresh_status, error_message, refreshed_at)
+                    values (
+                        upper(s.dblink_name), s.source_host, s.source_service,
+                        null, 'LINK_ERROR', substr(sqlerrm, 1, 2000), sysdate);
+                    commit;
+            end;
+        end loop;
+    end refresh_source_inventory;
 
     procedure add_result(
         p_run_id             in number,
@@ -362,7 +502,78 @@ create or replace package body mt_dcs_invalid_pkg as
         l_status_code varchar2(40);
         l_link_error  boolean := false;
         l_candidate_seen boolean := false;
+        l_rule_count number := 0;
+        l_inventory_count number := 0;
+        l_source_list varchar2(2000);
     begin
+        select count(distinct r.source_dblink_name),
+               listagg(r.source_dblink_name, ', ') within group (order by r.source_dblink_name)
+        into   l_rule_count,
+               l_source_list
+        from   mt_dcs_schema_source_rule r
+        where  r.dcs_schema = upper(p_schema)
+        and    r.aktiv = 'J';
+
+        if l_rule_count = 0 then
+            select count(distinct i.source_dblink_name),
+                   listagg(i.source_dblink_name, ', ') within group (order by i.source_dblink_name)
+            into   l_inventory_count,
+                   l_source_list
+            from   mt_source_schema_inventory i
+            where  i.schema_name = upper(p_schema)
+            and    i.refresh_status = 'OK';
+
+            if l_inventory_count = 0 then
+                add_result(
+                    p_run_id             => p_run_id,
+                    p_line_no            => p_line_no,
+                    p_raw_line           => p_raw_line,
+                    p_schema             => p_schema,
+                    p_object_name        => p_object_name,
+                    p_parsed_object_type => p_object_type,
+                    p_source_host        => null,
+                    p_source_service     => null,
+                    p_source_dblink_name => null,
+                    p_source_object_type => null,
+                    p_source_status      => null,
+                    p_result_status      => 'SOURCE_NOT_CONFIGURED',
+                    p_hinweis            => 'Schema nicht im PROD-Quellinventar gefunden. Quellinventar aktualisieren oder Quellregel manuell setzen.');
+                return;
+            elsif l_inventory_count > 1 then
+                add_result(
+                    p_run_id             => p_run_id,
+                    p_line_no            => p_line_no,
+                    p_raw_line           => p_raw_line,
+                    p_schema             => p_schema,
+                    p_object_name        => p_object_name,
+                    p_parsed_object_type => p_object_type,
+                    p_source_host        => null,
+                    p_source_service     => null,
+                    p_source_dblink_name => null,
+                    p_source_object_type => null,
+                    p_source_status      => null,
+                    p_result_status      => 'SOURCE_AMBIGUOUS',
+                    p_hinweis            => 'Schema in mehreren PROD-Quellen gefunden: ' || substr(l_source_list, 1, 1800) || '. Bitte Quellregel setzen.');
+                return;
+            end if;
+        elsif l_rule_count > 1 then
+            add_result(
+                p_run_id             => p_run_id,
+                p_line_no            => p_line_no,
+                p_raw_line           => p_raw_line,
+                p_schema             => p_schema,
+                p_object_name        => p_object_name,
+                p_parsed_object_type => p_object_type,
+                p_source_host        => null,
+                p_source_service     => null,
+                p_source_dblink_name => null,
+                p_source_object_type => null,
+                p_source_status      => null,
+                p_result_status      => 'SOURCE_AMBIGUOUS',
+                p_hinweis            => 'Mehrere aktive Quellregeln gefunden: ' || substr(l_source_list, 1, 1800) || '. Bitte eine Regel aktiv lassen.');
+            return;
+        end if;
+
         for s in (
             select distinct p.dblink_name,
                    src.hostname as source_host,
@@ -390,38 +601,20 @@ create or replace package body mt_dcs_invalid_pkg as
                        or     l.db_link like upper(p.dblink_name) || '.%'
                    )
             and    (
-                       exists (
+                       (l_rule_count > 0 and exists (
                            select 1
                            from   mt_dcs_schema_source_rule r
                            where  r.dcs_schema = upper(p_schema)
                            and    r.aktiv = 'J'
                            and    r.source_dblink_name = upper(p.dblink_name)
-                       )
-                    or (
-                           not exists (
-                               select 1
-                               from   mt_dcs_schema_source_rule r
-                               where  r.dcs_schema = upper(p_schema)
-                               and    r.aktiv = 'J'
-                           )
-                       and (
-                              upper(nvl(fv.schema_name, '-')) = upper(p_schema)
-                           or upper(nvl(fv.workspace_name, '-')) = upper(p_schema)
-                           or upper(nvl(fv.fv_kuerzel, '-')) = upper(p_schema)
-                          )
-                       )
-                   )
-            and    (
-                       upper(nvl(fv.schema_name, '-')) = upper(p_schema)
-                    or upper(nvl(fv.workspace_name, '-')) = upper(p_schema)
-                    or upper(nvl(fv.fv_kuerzel, '-')) = upper(p_schema)
-                    or exists (
+                       ))
+                    or (l_rule_count = 0 and exists (
                            select 1
-                           from   mt_dcs_schema_source_rule r
-                           where  r.dcs_schema = upper(p_schema)
-                           and    r.aktiv = 'J'
-                           and    r.source_dblink_name = upper(p.dblink_name)
-                       )
+                           from   mt_source_schema_inventory i
+                           where  i.schema_name = upper(p_schema)
+                           and    i.refresh_status = 'OK'
+                           and    i.source_dblink_name = upper(p.dblink_name)
+                       ))
                    )
             order  by match_rank, src.hostname, nvl(p.service_name, p.pdb_name), p.dblink_name
         ) loop
@@ -517,8 +710,12 @@ create or replace package body mt_dcs_invalid_pkg as
                 p_source_dblink_name => null,
                 p_source_object_type => null,
                 p_source_status      => null,
-                p_result_status      => 'SOURCE_NOT_CONFIGURED',
-                p_hinweis            => 'Keine PROD-Quellregel fuer dieses DCS-Schema konfiguriert. In MT_DCS_SCHEMA_SOURCE_RULE pflegen.');
+                p_result_status      => case when l_rule_count > 0 then 'SOURCE_LINK_ERROR' else 'SOURCE_NOT_CONFIGURED' end,
+                p_hinweis            => case
+                                           when l_rule_count > 0
+                                           then 'Quellregel vorhanden, aber kein passender aktiver USER_DB_LINK/Mapping-Kandidat gefunden: ' || substr(l_source_list, 1, 1600)
+                                           else 'Keine PROD-Quelle fuer dieses Schema gefunden. Quellinventar aktualisieren oder Quellregel setzen.'
+                                        end);
         elsif not l_found and not l_link_error then
             add_result(
                 p_run_id             => p_run_id,
