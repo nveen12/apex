@@ -201,78 +201,133 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
             'output_as',        'HTML',
             'show_line_breaks', 'N')).to_clob);
 
-    wwv_flow_imp_page.create_report_region(
-        p_id                         => wwv_flow_imp.id(l_region_sum),
-        p_name                       => 'DCS Analyse Zusammenfassung',
-        p_title                      => 'DCS Analyse Zusammenfassung',
-        p_template                   => wwv_flow_imp.id(10818657374759767),
-        p_display_sequence           => 20,
-        p_display_point              => 'BODY',
-        p_region_css_classes         => 'mt-dcs-report',
-        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
-        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
-        p_display_condition_type     => 'ITEM_IS_NOT_NULL',
-        p_display_when_condition     => 'P12_RUN_ID',
-        p_source_type                => 'NATIVE_SQL_REPORT',
-        p_query_type                 => 'SQL',
-        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
-            'select r.run_id,',
-            '       to_char(r.created_at, ''DD.MM.YYYY HH24:MI:SS'') as erstellt_am,',
-            '       r.line_count,',
-            '       r.parsed_count,',
-            '       x.result_status,',
-            '       count(*) as anzahl',
-            'from   mt_dcs_invalid_run r',
-            'join   mt_dcs_invalid_result x on x.run_id = r.run_id',
-            'where  r.run_id = :P12_RUN_ID',
-            'group  by r.run_id, r.created_at, r.line_count, r.parsed_count, x.result_status',
-            'order  by case x.result_status',
-            '            when ''SOURCE_VALID_DCS_INVALID'' then 1',
-            '            when ''SOURCE_INVALID_DCS_INVALID'' then 2',
-            '            when ''SOURCE_LINK_ERROR'' then 3',
-            '            when ''NOT_FOUND_IN_PROD_SOURCE'' then 4',
-            '            else 5',
-            '          end')),
-        p_query_num_rows             => 20,
-        p_query_options              => 'DERIVED_REPORT_COLUMNS');
+    wwv_flow_imp_page.create_page_plug(
+        p_id                      => wwv_flow_imp.id(l_region_sum),
+        p_plug_name               => 'DCS Analyse Ergebnis',
+        p_title                   => 'DCS Analyse Ergebnis',
+        p_plug_template           => wwv_flow_imp.id(10818657374759767),
+        p_region_css_classes      => 'mt-dcs-report',
+        p_region_template_options => '#DEFAULT#:t-Region--scrollBody',
+        p_plug_display_sequence   => 20,
+        p_plug_display_point      => 'BODY',
+        p_plug_source_type        => 'NATIVE_PLSQL',
+        p_plug_source             => q'~declare
+    l_rows number := 0;
 
-    wwv_flow_imp_page.create_report_region(
-        p_id                         => wwv_flow_imp.id(l_region_detail),
-        p_name                       => 'DCS Invalid Vergleich Ergebnis',
-        p_title                      => 'DCS Invalid Vergleich Ergebnis',
-        p_template                   => wwv_flow_imp.id(10818657374759767),
-        p_display_sequence           => 30,
-        p_display_point              => 'BODY',
-        p_region_css_classes         => 'mt-dcs-report',
-        p_region_template_options    => '#DEFAULT#:t-Region--scrollBody',
-        p_component_template_options => '#DEFAULT#:t-Report--altRowsDefault:t-Report--rowHighlight',
-        p_display_condition_type     => 'ITEM_IS_NOT_NULL',
-        p_display_when_condition     => 'P12_RUN_ID',
-        p_source_type                => 'NATIVE_SQL_REPORT',
-        p_query_type                 => 'SQL',
-        p_source                     => wwv_flow_string.join(wwv_flow_t_varchar2(
-            'select line_no                         as "Zeile",',
-            '       parsed_schema                   as "DCS Schema",',
-            '       object_name                     as "Objekt",',
-            '       nvl(parsed_object_type, ''-'')  as "DCS Typ",',
-            '       nvl(source_host, ''-'')         as "Quelle Host",',
-            '       nvl(source_service, ''-'')      as "Quelle Service",',
-            '       nvl(source_object_type, ''-'')  as "Quelle Typ",',
-            '       nvl(source_status, ''-'')       as "Quelle Status",',
-            '       result_status                   as "Ergebnis",',
-            '       hinweis                         as "Hinweis"',
-            'from   mt_dcs_invalid_result',
-            'where  run_id = :P12_RUN_ID',
-            'order  by case result_status',
-            '            when ''SOURCE_VALID_DCS_INVALID'' then 1',
-            '            when ''SOURCE_INVALID_DCS_INVALID'' then 2',
-            '            when ''SOURCE_LINK_ERROR'' then 3',
-            '            when ''NOT_FOUND_IN_PROD_SOURCE'' then 4',
-            '            else 5',
-            '          end,',
-            '          parsed_schema, object_name, source_host, source_service')),
-        p_query_num_rows             => 100,
-        p_query_options              => 'DERIVED_REPORT_COLUMNS');
+    function esc(p_text in varchar2) return varchar2 is
+    begin
+        return apex_escape.html(p_text);
+    end;
+
+    procedure table_begin(p_title in varchar2, p_head in varchar2) is
+    begin
+        htp.p('<h3>' || esc(p_title) || '</h3>');
+        htp.p('<table class="t-Report-report" style="width:100%;max-width:1400px">');
+        htp.p('<thead>' || p_head || '</thead><tbody>');
+    end;
+
+    procedure table_end is
+    begin
+        htp.p('</tbody></table>');
+    end;
+begin
+    if :P12_RUN_ID is null then
+        htp.p('<div class="t-Alert t-Alert--info">Paste DCS invalid-object text and click <strong>DCS Invalide analysieren</strong>.</div>');
+        return;
+    end if;
+
+    table_begin(
+        'DCS Analyse Zusammenfassung',
+        '<tr><th>Run</th><th>Erstellt am</th><th>Zeilen</th><th>Geparst</th><th>Ergebnis</th><th>Anzahl</th></tr>');
+
+    for r in (
+        select r.run_id,
+               to_char(r.created_at, 'DD.MM.YYYY HH24:MI:SS') as erstellt_am,
+               r.line_count,
+               r.parsed_count,
+               x.result_status,
+               count(*) as anzahl
+        from   mt_dcs_invalid_run r
+        join   mt_dcs_invalid_result x on x.run_id = r.run_id
+        where  r.run_id = :P12_RUN_ID
+        group  by r.run_id, r.created_at, r.line_count, r.parsed_count, x.result_status
+        order  by case x.result_status
+                    when 'SOURCE_VALID_DCS_INVALID' then 1
+                    when 'SOURCE_INVALID_DCS_INVALID' then 2
+                    when 'SOURCE_LINK_ERROR' then 3
+                    when 'NOT_FOUND_IN_PROD_SOURCE' then 4
+                    else 5
+                  end
+    ) loop
+        l_rows := l_rows + 1;
+        htp.p('<tr><td>' || r.run_id || '</td><td>' || esc(r.erstellt_am) ||
+              '</td><td>' || r.line_count || '</td><td>' || r.parsed_count ||
+              '</td><td><strong>' || esc(r.result_status) || '</strong></td><td>' ||
+              r.anzahl || '</td></tr>');
+    end loop;
+
+    if l_rows = 0 then
+        htp.p('<tr><td colspan="6">Keine Ergebniszeilen fuer diesen Lauf gefunden.</td></tr>');
+    end if;
+    table_end;
+
+    htp.p('<br>');
+    l_rows := 0;
+    table_begin(
+        'DCS Invalid Vergleich Ergebnis',
+        '<tr><th>Zeile</th><th>DCS Schema</th><th>Objekt</th><th>DCS Typ</th><th>Quelle Host</th><th>Quelle Service</th><th>Quelle Typ</th><th>Quelle Status</th><th>Ergebnis</th><th>Hinweis</th></tr>');
+
+    for r in (
+        select line_no,
+               parsed_schema,
+               object_name,
+               nvl(parsed_object_type, '-') as parsed_object_type,
+               nvl(source_host, '-') as source_host,
+               nvl(source_service, '-') as source_service,
+               nvl(source_object_type, '-') as source_object_type,
+               nvl(source_status, '-') as source_status,
+               result_status,
+               hinweis
+        from   mt_dcs_invalid_result
+        where  run_id = :P12_RUN_ID
+        order  by case result_status
+                    when 'SOURCE_VALID_DCS_INVALID' then 1
+                    when 'SOURCE_INVALID_DCS_INVALID' then 2
+                    when 'SOURCE_LINK_ERROR' then 3
+                    when 'NOT_FOUND_IN_PROD_SOURCE' then 4
+                    else 5
+                  end,
+                  parsed_schema, object_name, source_host, source_service
+    ) loop
+        l_rows := l_rows + 1;
+        exit when l_rows > 300;
+        htp.p('<tr><td>' || r.line_no ||
+              '</td><td>' || esc(r.parsed_schema) ||
+              '</td><td>' || esc(r.object_name) ||
+              '</td><td>' || esc(r.parsed_object_type) ||
+              '</td><td>' || esc(r.source_host) ||
+              '</td><td>' || esc(r.source_service) ||
+              '</td><td>' || esc(r.source_object_type) ||
+              '</td><td>' || esc(r.source_status) ||
+              '</td><td><strong>' || esc(r.result_status) ||
+              '</strong></td><td>' || esc(r.hinweis) || '</td></tr>');
+    end loop;
+
+    if l_rows = 0 then
+        htp.p('<tr><td colspan="10">Keine Details gefunden.</td></tr>');
+    elsif l_rows > 300 then
+        htp.p('<tr><td colspan="10">Ausgabe auf 300 Zeilen begrenzt.</td></tr>');
+    end if;
+    table_end;
+exception
+    when others then
+        htp.p('<div class="t-Alert t-Alert--danger"><strong>DCS Analyse:</strong> ' ||
+              esc(sqlerrm) || '</div>');
+end;~',
+        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
+            'expand_shortcuts', 'N',
+            'output_as',        'HTML',
+            'show_line_breaks', 'N')).to_clob);
 
     wwv_flow_imp_page.create_page_process(
         p_id                     => wwv_flow_imp.id(91200000000000050),
