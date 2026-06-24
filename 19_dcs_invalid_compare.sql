@@ -149,6 +149,47 @@ end mt_dcs_invalid_pkg;
 
 create or replace package body mt_dcs_invalid_pkg as
 
+    type t_cache is table of varchar2(1) index by varchar2(4000);
+    g_schema_link_cache t_cache;
+
+    procedure close_db_link(p_link in varchar2) is
+    begin
+        execute immediate
+            'alter session close database link ' ||
+            dbms_assert.simple_sql_name(p_link);
+    exception
+        when others then
+            null;
+    end;
+
+    function schema_exists_on_link(
+        p_schema in varchar2,
+        p_link   in varchar2
+    ) return boolean is
+        l_key   varchar2(4000) := upper(p_schema) || '@' || upper(p_link);
+        l_count number;
+        l_link  varchar2(261);
+    begin
+        if g_schema_link_cache.exists(l_key) then
+            return g_schema_link_cache(l_key) = 'Y';
+        end if;
+
+        l_link := dbms_assert.simple_sql_name(p_link);
+        execute immediate
+            'select count(*) from all_users@' || l_link ||
+            ' where username = :schema_name'
+            into l_count
+            using upper(p_schema);
+
+        close_db_link(l_link);
+        g_schema_link_cache(l_key) := case when l_count > 0 then 'Y' else 'N' end;
+        return l_count > 0;
+    exception
+        when others then
+            close_db_link(p_link);
+            raise;
+    end;
+
     procedure add_result(
         p_run_id             in number,
         p_line_no            in number,
@@ -236,6 +277,10 @@ create or replace package body mt_dcs_invalid_pkg as
         ) loop
             begin
                 l_link := dbms_assert.simple_sql_name(s.dblink_name);
+                if not schema_exists_on_link(p_schema, l_link) then
+                    continue;
+                end if;
+
                 l_sql :=
                     'select object_type, status' ||
                     ' from all_objects@' || l_link ||
@@ -280,12 +325,14 @@ create or replace package body mt_dcs_invalid_pkg as
                                                 end);
                 end loop;
                 close l_rc;
+                close_db_link(l_link);
             exception
                 when others then
                     l_link_error := true;
                     if l_rc%isopen then
                         close l_rc;
                     end if;
+                    close_db_link(l_link);
                     add_result(
                         p_run_id             => p_run_id,
                         p_line_no            => p_line_no,

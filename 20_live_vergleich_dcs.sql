@@ -78,6 +78,10 @@ begin
 .mt-dcs-actions{display:flex;gap:8px;margin-top:8px}
 .mt-dcs-actions .t-Button{min-width:120px}
 .mt-dcs-report .t-Report-report{font-size:.86rem}
+.mt-dcs-result-wrap{overflow:auto;max-width:1500px}
+.mt-dcs-result-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:1120px}
+.mt-dcs-result-table th,.mt-dcs-result-table td{padding:6px 8px;vertical-align:top;white-space:nowrap}
+.mt-dcs-result-table td:last-child{white-space:normal;min-width:320px;max-width:520px}
 .mt-dcs-status-source-valid-dcs-invalid{color:#b42318;font-weight:700}
 .mt-dcs-status-source-invalid-dcs-invalid{color:#7a4b00;font-weight:700}
 .mt-dcs-status-not-found-in-prod-source,
@@ -222,13 +226,14 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
     procedure table_begin(p_title in varchar2, p_head in varchar2) is
     begin
         htp.p('<h3>' || esc(p_title) || '</h3>');
-        htp.p('<table class="t-Report-report" style="width:100%;max-width:1400px">');
+        htp.p('<div class="mt-dcs-result-wrap">');
+        htp.p('<table class="t-Report-report mt-dcs-result-table">');
         htp.p('<thead>' || p_head || '</thead><tbody>');
     end;
 
     procedure table_end is
     begin
-        htp.p('</tbody></table>');
+        htp.p('</tbody></table></div>');
     end;
 begin
     if :P12_RUN_ID is null then
