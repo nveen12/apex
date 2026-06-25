@@ -394,7 +394,7 @@ create or replace package body mt_dcs_invalid_pkg as
                        where  l.db_link = upper(p.dblink_name)
                        or     l.db_link like upper(p.dblink_name) || '.%'
                    )
-            order  by src.hostname, nvl(p.service_name, p.pdb_name), upper(p.dblink_name)
+            order  by source_host, source_service, dblink_name
         ) loop
             begin
                 l_link := dbms_assert.simple_sql_name(s.dblink_name);
@@ -616,7 +616,7 @@ create or replace package body mt_dcs_invalid_pkg as
                            and    i.source_dblink_name = upper(p.dblink_name)
                        ))
                    )
-            order  by match_rank, src.hostname, nvl(p.service_name, p.pdb_name), p.dblink_name
+            order  by match_rank, source_host, source_service, dblink_name
         ) loop
             l_candidate_seen := true;
             begin
@@ -946,6 +946,23 @@ end mt_dcs_invalid_pkg;
 
 show errors package mt_dcs_invalid_pkg
 show errors package body mt_dcs_invalid_pkg
+
+declare
+    l_status user_objects.status%type;
+begin
+    select status
+    into   l_status
+    from   user_objects
+    where  object_name = 'MT_DCS_INVALID_PKG'
+    and    object_type = 'PACKAGE BODY';
+
+    if l_status <> 'VALID' then
+        raise_application_error(
+            -20091,
+            'MT_DCS_INVALID_PKG package body is invalid. Run: show errors package body mt_dcs_invalid_pkg');
+    end if;
+end;
+/
 
 select object_name, object_type, status
 from   user_objects

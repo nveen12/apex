@@ -287,13 +287,16 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
         from   mt_source_schema_inventory;
 
         if l_refreshed is null then
-            htp.p('<div class="t-Alert t-Alert--warning">PROD-Quellinventar ist noch leer. Bitte zuerst <strong>Quellinventar aktualisieren</strong> klicken.</div>');
+            htp.p('<div class="t-Alert t-Alert--warning">PROD-Quellinventar ist noch leer. Beim Klick auf <strong>DCS Invalide analysieren</strong> wird es automatisch aktualisiert; alternativ kannst du vorher <strong>Quellinventar aktualisieren</strong> klicken.</div>');
         else
             htp.p('<div class="t-Alert t-Alert--info">PROD-Quellinventar: ' ||
                   l_ok_schemas || ' Schema(s) aus ' || l_links ||
                   ' DB-Link(s), aktualisiert am ' || esc(l_refreshed) ||
                   case when l_errors > 0 then '. Fehlerhafte DB-Links: ' || l_errors else '' end ||
                   '.</div>');
+            if l_ok_schemas = 0 then
+                htp.p('<div class="t-Alert t-Alert--danger">Inventar wurde aktualisiert, aber keine Anwendungsschemas gefunden. Bitte USER_DB_LINKS und aktive PROD-Quelle-Mappings pruefen.</div>');
+            end if;
         end if;
     end;
 
@@ -514,6 +517,14 @@ end;~',
             '            p_raw_text   => :P12_INVALID_TEXT,',
             '            p_created_by => nvl(v(''APP_USER''), user));',
             '    elsif apex_application.g_request = ''ANALYZE_DCS'' then',
+            '        declare',
+            '            l_inventory_count number;',
+            '        begin',
+            '            select count(*) into l_inventory_count from mt_source_schema_inventory;',
+            '            if l_inventory_count = 0 then',
+            '                mt_dcs_invalid_pkg.refresh_source_inventory;',
+            '            end if;',
+            '        end;',
             '        :P12_RUN_ID := mt_dcs_invalid_pkg.analyze(',
             '            p_raw_text   => :P12_INVALID_TEXT,',
             '            p_created_by => nvl(v(''APP_USER''), user));',
