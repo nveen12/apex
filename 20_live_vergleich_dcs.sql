@@ -302,17 +302,23 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
 
     procedure render_rule_helper is
         l_missing_count number := 0;
+        l_schema_count  number := 0;
         l_link_count    number := 0;
     begin
+        select count(distinct parsed_schema)
+        into   l_schema_count
+        from   mt_dcs_invalid_result
+        where  run_id = :P12_RUN_ID;
+
+        if l_schema_count = 0 then
+            return;
+        end if;
+
         select count(distinct parsed_schema)
         into   l_missing_count
         from   mt_dcs_invalid_result
         where  run_id = :P12_RUN_ID
         and    result_status in ('SOURCE_NOT_CONFIGURED', 'SOURCE_AMBIGUOUS');
-
-        if l_missing_count = 0 then
-            return;
-        end if;
 
         select count(*)
         into   l_link_count
@@ -333,21 +339,68 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
                    )
         );
 
-        htp.p('<h3>Quellzuordnung pruefen</h3>');
-        htp.p('<div class="t-Alert t-Alert--warning">Diese DCS-Schemas konnten nicht eindeutig automatisch zugeordnet werden. Bitte Schema auswaehlen, korrekten PROD-DB-Link setzen und neu analysieren.</div>');
+        htp.p('<h3>Quellzuordnung pruefen / aendern</h3>');
+
+        if l_missing_count > 0 then
+            htp.p('<div class="t-Alert t-Alert--warning">' || l_missing_count ||
+                  ' DCS-Schema(s) konnten nicht eindeutig automatisch zugeordnet werden. Bitte Schema auswaehlen, korrekten PROD-DB-Link setzen und neu analysieren.</div>');
+        else
+            htp.p('<div class="t-Alert t-Alert--success">Alle DCS-Schemas dieses Laufs sind zugeordnet. Du kannst die Quellregel hier trotzdem pruefen oder aendern.</div>');
+        end if;
+
+        table_begin(
+            'Aktive manuelle Quellregeln fuer diesen Lauf',
+            '<tr><th>DCS Schema</th><th>PROD Quelle</th><th>Hinweis</th></tr>');
+
+        for r in (
+            select x.parsed_schema,
+                   nvl(rule.source_dblink_name, '-') as source_dblink_name,
+                   case
+                       when rule.source_dblink_name is null then 'Keine manuelle Regel; automatische Zuordnung/Inventar wird verwendet.'
+                       else 'Manuelle Regel aktiv. Auswahl unten aendern und speichern, falls falsch.'
+                   end as hinweis
+            from (
+                select distinct upper(parsed_schema) as parsed_schema
+                from   mt_dcs_invalid_result
+                where  run_id = :P12_RUN_ID
+            ) x
+            left join mt_dcs_schema_source_rule rule
+                   on rule.dcs_schema = x.parsed_schema
+                  and rule.aktiv = 'J'
+            order by x.parsed_schema
+        ) loop
+            htp.p('<tr><td>' || esc(r.parsed_schema) ||
+                  '</td><td>' || esc(r.source_dblink_name) ||
+                  '</td><td>' || esc(r.hinweis) || '</td></tr>');
+        end loop;
+
+        table_end;
+
         htp.p('<div class="mt-dcs-rule-form">');
         htp.p('<label>DCS Schema<select id="MT_DCS_RULE_SCHEMA">');
         htp.p('<option value="">- Schema waehlen -</option>');
         for s in (
-            select parsed_schema, count(*) as anzahl
-            from   mt_dcs_invalid_result
-            where  run_id = :P12_RUN_ID
-            and    result_status in ('SOURCE_NOT_CONFIGURED', 'SOURCE_AMBIGUOUS')
-            group  by parsed_schema
-            order  by parsed_schema
+            select x.parsed_schema,
+                   x.anzahl,
+                   rule.source_dblink_name
+            from (
+                select upper(parsed_schema) as parsed_schema,
+                       count(*) as anzahl
+                from   mt_dcs_invalid_result
+                where  run_id = :P12_RUN_ID
+                group  by upper(parsed_schema)
+            ) x
+            left join mt_dcs_schema_source_rule rule
+                   on rule.dcs_schema = x.parsed_schema
+                  and rule.aktiv = 'J'
+            order  by x.parsed_schema
         ) loop
             htp.p('<option value="' || esc(s.parsed_schema) || '">' ||
-                  esc(s.parsed_schema) || ' (' || s.anzahl || ' Objekt(e))</option>');
+                  esc(s.parsed_schema) || ' (' || s.anzahl || ' Objekt(e)' ||
+                  case when s.source_dblink_name is not null
+                       then ', aktuell: ' || esc(s.source_dblink_name)
+                       else ', automatisch/ohne manuelle Regel'
+                  end || ')</option>');
         end loop;
         htp.p('</select></label>');
 
