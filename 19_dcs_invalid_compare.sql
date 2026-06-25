@@ -370,6 +370,7 @@ create or replace package body mt_dcs_invalid_pkg as
         l_sql    varchar2(32767);
         l_schema varchar2(128);
         l_rc     sys_refcursor;
+        l_error_message varchar2(2000);
     begin
         delete from mt_source_schema_inventory;
         commit;
@@ -423,6 +424,7 @@ create or replace package body mt_dcs_invalid_pkg as
                 commit;
             exception
                 when others then
+                    l_error_message := substr(sqlerrm, 1, 2000);
                     if l_rc%isopen then
                         close l_rc;
                     end if;
@@ -432,7 +434,7 @@ create or replace package body mt_dcs_invalid_pkg as
                         schema_name, refresh_status, error_message, refreshed_at)
                     values (
                         upper(s.dblink_name), s.source_host, s.source_service,
-                        null, 'LINK_ERROR', substr(sqlerrm, 1, 2000), sysdate);
+                        null, 'LINK_ERROR', l_error_message, sysdate);
                     commit;
             end;
         end loop;
