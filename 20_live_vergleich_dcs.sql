@@ -137,22 +137,6 @@ begin
             'show_line_breaks', 'N')).to_clob);
 
     wwv_flow_imp_page.create_page_plug(
-        p_id                      => wwv_flow_imp.id(l_region_help),
-        p_plug_name               => 'Hinweis',
-        p_region_template_options => '#DEFAULT#',
-        p_plug_template           => wwv_flow_imp.id(10818657374759767),
-        p_plug_display_sequence   => 5,
-        p_plug_display_point      => 'BODY',
-        p_plug_source             => q'~<div class="mt-dcs-help">
-<strong>DCS Invalid-Objekte analysieren</strong>
-Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQL*Plus-Ausgabe mit <code>OWNER OBJECT_TYPE OBJECT_NAME</code> sowie einfache Zeilen mit <code>SCHEMA.OBJECT_NAME</code>. Zuerst das PROD-Quellinventar aktualisieren. Danach ordnet die App DCS-Schemas automatisch anhand des lokalen Inventars einer PROD-Quelle zu. Nur mehrdeutige oder fehlende Schemas brauchen eine manuelle Quellregel.
-</div>~',
-        p_attributes              => wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
-            'expand_shortcuts', 'N',
-            'output_as',        'HTML',
-            'show_line_breaks', 'N')).to_clob);
-
-    wwv_flow_imp_page.create_page_plug(
         p_id                      => wwv_flow_imp.id(l_region_input),
         p_plug_name               => 'DCS Invalid-Liste',
         p_title                   => 'DCS Invalid-Liste',
@@ -341,24 +325,17 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
 
         htp.p('<h3>Quellzuordnung pruefen / aendern</h3>');
 
-        if l_missing_count > 0 then
-            htp.p('<div class="t-Alert t-Alert--warning">' || l_missing_count ||
-                  ' DCS-Schema(s) konnten nicht eindeutig automatisch zugeordnet werden. Bitte Schema auswaehlen, korrekten PROD-DB-Link setzen und neu analysieren.</div>');
-        else
+        if l_missing_count = 0 then
             htp.p('<div class="t-Alert t-Alert--success">Alle DCS-Schemas dieses Laufs sind zugeordnet. Du kannst die Quellregel hier trotzdem pruefen oder aendern.</div>');
         end if;
 
         table_begin(
             'Aktive manuelle Quellregeln fuer diesen Lauf',
-            '<tr><th>DCS Schema</th><th>PROD Quelle</th><th>Hinweis</th></tr>');
+            '<tr><th>DCS Schema</th><th>PROD Quelle</th></tr>');
 
         for r in (
             select x.parsed_schema,
-                   nvl(rule.source_dblink_name, '-') as source_dblink_name,
-                   case
-                       when rule.source_dblink_name is null then 'Keine manuelle Regel; automatische Zuordnung/Inventar wird verwendet.'
-                       else 'Manuelle Regel aktiv. Auswahl unten aendern und speichern, falls falsch.'
-                   end as hinweis
+                   nvl(rule.source_dblink_name, '-') as source_dblink_name
             from (
                 select distinct upper(parsed_schema) as parsed_schema
                 from   mt_dcs_invalid_result
@@ -370,8 +347,7 @@ Paste die Dataport/DCS-Liste mit invaliden Objekten hier hinein. Erkannt wird SQ
             order by x.parsed_schema
         ) loop
             htp.p('<tr><td>' || esc(r.parsed_schema) ||
-                  '</td><td>' || esc(r.source_dblink_name) ||
-                  '</td><td>' || esc(r.hinweis) || '</td></tr>');
+                  '</td><td>' || esc(r.source_dblink_name) || '</td></tr>');
         end loop;
 
         table_end;
