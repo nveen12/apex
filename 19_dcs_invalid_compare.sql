@@ -235,37 +235,187 @@ using (
     select 'AED' as dcs_schema,
            'RZHS184_SUPPORT_FREE_PROD' as source_dblink_name,
            'J' as aktiv,
-           'Aus DCS-Invalid-Test bestaetigt: AED-Objekte liegen auf SUPPORT_FREE.PROD.' as kommentar
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD.' as kommentar
+    from dual
+    union all
+    select 'AED_JN',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD.'
+    from dual
+    union all
+    select 'AUS_STM',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD.'
+    from dual
+    union all
+    select 'BSA',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD.'
+    from dual
+    union all
+    select 'GIOLJN',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD; Schreibweise aus Screenshot uebernommen.'
+    from dual
+    union all
+    select 'HAL',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD; Schreibweise aus Screenshot uebernommen.'
+    from dual
+    union all
+    select 'INFUST_BS',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD; Schreibweise aus Screenshot uebernommen.'
+    from dual
+    union all
+    select 'SV_PERLE',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD.'
+    from dual
+    union all
+    select 'UTILS',
+           'RZHS184_SUPPORT_FREE_PROD',
+           'J',
+           'Aus AEN Source target mapping: SUPPORTFR/SUPPORT_FREE.PROD.'
+    from dual
+    union all
+    select 'KANBAN',
+           'RZHS184_SEMINAR_PROD',
+           'J',
+           'Aus AEN Source target mapping: SEMINR/SEMINAR.PROD.'
     from dual
     union all
     select 'MBF',
            'RZHS184_SEMINAR_PROD',
            'J',
-           'Aus DCS-Invalid-Test beobachtet: MBF-Objekte wurden auf SEMINAR.PROD gefunden.'
+           'Aus AEN Source target mapping: SEMINR/SEMINAR.PROD.'
+    from dual
+    union all
+    select 'MBF_JN',
+           'RZHS184_SEMINAR_PROD',
+           'J',
+           'Aus AEN Source target mapping: SEMINR/SEMINAR.PROD.'
     from dual
     union all
     select 'OPK',
            'RZHS184_OPK_PROD',
            'J',
-           'Aus Screenshot-Mapping: OPK PROD-Quelle.'
+           'Aus AEN Source target mapping: DBAE21/OPK.PROD.'
+    from dual
+    union all
+    select 'OPK_JN',
+           'RZHS184_OPK_PROD',
+           'J',
+           'Aus AEN Source target mapping: DBAE21/OPK.PROD.'
+    from dual
+    union all
+    select 'PINGO',
+           'RZHS184_PINGO_PROD',
+           'J',
+           'Aus AEN Source target mapping: PNGO/PINGO.PROD.'
+    from dual
+    union all
+    select 'PINGO_JN',
+           'RZHS184_PINGO_PROD',
+           'J',
+           'Aus AEN Source target mapping: PNGO/PINGO.PROD.'
     from dual
     union all
     select 'RZ782',
            'RZHS406_PARADOX_PROD',
            'J',
-           'Aus Screenshot-Mapping: GG/RZ782 PROD-Quelle paradox.PROD.'
+           'Aus AEN Source target mapping: PARADO/GG.PRD.'
+    from dual
+    union all
+    select 'RZ782_JN',
+           'RZHS406_PARADOX_PROD',
+           'J',
+           'Aus AEN Source target mapping: PARADO/GG.PRD.'
+    from dual
+    union all
+    select 'GOETTINGER',
+           'RZHS406_PARADOX_PROD',
+           'J',
+           'Aus AEN Source target mapping: PARADO/GG.PRD.'
+    from dual
+    union all
+    select 'MASSENDRUCK_2018',
+           'RZHS406_PARADOX_PROD',
+           'J',
+           'Aus AEN Source target mapping: PARADO/GG.PRD.'
     from dual
     union all
     select 'SEMINAR',
            'RZHS184_SEMINAR_PROD',
            'J',
-           'Aus Screenshot-Mapping: SEMINAR PROD-Quelle.'
+           'Aus AEN Source target mapping: SEMINR/SEMINAR.PROD.'
+    from dual
+    union all
+    select 'SEMINAR_JN',
+           'RZHS184_SEMINAR_PROD',
+           'J',
+           'Aus AEN Source target mapping: SEMINR/SEMINAR.PROD.'
+    from dual
+    union all
+    select 'STATIST',
+           'RZHS406_STAPOPDB_PROD',
+           'J',
+           'Aus AEN Source target mapping: VOSTAT.PRD Quelle #2 STAPO/STAPOPDB.PROD.'
+    from dual
+    union all
+    select 'STATIST_JN',
+           'RZHS406_STAPOPDB_PROD',
+           'J',
+           'Aus AEN Source target mapping: VOSTAT.PRD Quelle #2 STAPO/STAPOPDB.PROD.'
+    from dual
+    union all
+    select 'STATTEST',
+           'RZHS406_STAPOPDB_PROD',
+           'J',
+           'Aus AEN Source target mapping: VOSTAT.PRD Quelle #2 STAPO/STAPOPDB.PROD.'
+    from dual
+    union all
+    select 'USTSPR',
+           'RZHS184_CONTROLLING_PROD',
+           'J',
+           'Aus AEN Source target mapping: CNTRLNG/CONTROLLING.PROD. TODO DBA: DB-Link anlegen/pruefen.'
+    from dual
+    union all
+    select 'USTSPR_JN',
+           'RZHS184_CONTROLLING_PROD',
+           'J',
+           'Aus AEN Source target mapping: CNTRLNG/CONTROLLING.PROD. TODO DBA: DB-Link anlegen/pruefen.'
     from dual
     union all
     select 'VOLLSTRECKUNG',
            'RZHS407_VOLLSTRP_PROD',
            'J',
-           'Vom DBA bestaetigt: VOSTAT.PRD Quelle fuer Schema VOLLSTRECKUNG ist rzhs407/VOLLSTRP.PROD.'
+           'Aus AEN Source target mapping: VOSTAT.PRD Quelle #1 VOLLSTR/VOLLSTRP.PROD.'
+    from dual
+    union all
+    select 'VOLLSTRECKUNG_JN',
+           'RZHS407_VOLLSTRP_PROD',
+           'J',
+           'Aus AEN Source target mapping: VOSTAT.PRD Quelle #1 VOLLSTR/VOLLSTRP.PROD.'
+    from dual
+    union all
+    select 'IT_FALL',
+           'RZHS159_ITPROD',
+           'J',
+           'Aus AEN Source target mapping: ITPROD/ITFALL.PROD.'
+    from dual
+    union all
+    select 'CSALZBRUNN',
+           'RZHS159_ITPROD',
+           'J',
+           'Aus AEN Source target mapping: ITPROD/ITFALL.PROD; "stehen lassen".'
     from dual
 ) src
 on (
@@ -577,47 +727,74 @@ create or replace package body mt_dcs_invalid_pkg as
         end if;
 
         for s in (
-            select distinct p.dblink_name,
-                   src.hostname as source_host,
-                   nvl(p.service_name, p.pdb_name) as source_service,
-                   case
-                       when upper(nvl(fv.schema_name, '-')) = upper(p_schema) then 1
-                       when upper(nvl(fv.workspace_name, '-')) = upper(p_schema) then 2
-                       when upper(nvl(fv.fv_kuerzel, '-')) = upper(p_schema) then 3
-                       else 9
-                   end as match_rank
-            from   mt_fv_pdb_mapping m
-            join   mt_fachverfahren fv on fv.fv_id = m.fv_id
-            join   mt_pdb p      on p.pdb_id = m.pdb_id
-            join   mt_cdb c      on c.cdb_id = p.cdb_id
-            join   mt_server src on src.server_id = c.server_id
-            where  m.mapping_role = 'QUELLE'
-            and    nvl(m.aktiv, 'J') = 'J'
-            and    nvl(p.tier, '-') = 'PROD'
-            and    p.dblink_name is not null
-            and    p.dblink_name not like '##%##'
-            and    exists (
-                       select 1
-                       from   user_db_links l
-                       where  l.db_link = upper(p.dblink_name)
-                       or     l.db_link like upper(p.dblink_name) || '.%'
-                   )
-            and    (
-                       (l_rule_count > 0 and exists (
+            select dblink_name,
+                   max(source_host) as source_host,
+                   max(source_service) as source_service,
+                   min(match_rank) as match_rank
+            from (
+                select upper(p.dblink_name) as dblink_name,
+                       src.hostname as source_host,
+                       nvl(p.service_name, p.pdb_name) as source_service,
+                       case
+                           when upper(nvl(fv.schema_name, '-')) = upper(p_schema) then 1
+                           when upper(nvl(fv.workspace_name, '-')) = upper(p_schema) then 2
+                           when upper(nvl(fv.fv_kuerzel, '-')) = upper(p_schema) then 3
+                           else 9
+                       end as match_rank
+                from   mt_fv_pdb_mapping m
+                join   mt_fachverfahren fv on fv.fv_id = m.fv_id
+                join   mt_pdb p      on p.pdb_id = m.pdb_id
+                join   mt_cdb c      on c.cdb_id = p.cdb_id
+                join   mt_server src on src.server_id = c.server_id
+                where  m.mapping_role = 'QUELLE'
+                and    nvl(m.aktiv, 'J') = 'J'
+                and    nvl(p.tier, '-') = 'PROD'
+                and    p.dblink_name is not null
+                and    p.dblink_name not like '##%##'
+                and    exists (
                            select 1
-                           from   mt_dcs_schema_source_rule r
-                           where  r.dcs_schema = upper(p_schema)
-                           and    r.aktiv = 'J'
-                           and    r.source_dblink_name = upper(p.dblink_name)
-                       ))
-                    or (l_rule_count = 0 and exists (
+                           from   user_db_links l
+                           where  l.db_link = upper(p.dblink_name)
+                           or     l.db_link like upper(p.dblink_name) || '.%'
+                       )
+                and    (
+                           (l_rule_count > 0 and exists (
+                               select 1
+                               from   mt_dcs_schema_source_rule r
+                               where  r.dcs_schema = upper(p_schema)
+                               and    r.aktiv = 'J'
+                               and    r.source_dblink_name = upper(p.dblink_name)
+                           ))
+                        or (l_rule_count = 0 and exists (
+                               select 1
+                               from   mt_source_schema_inventory i
+                               where  i.schema_name = upper(p_schema)
+                               and    i.refresh_status = 'OK'
+                               and    i.source_dblink_name = upper(p.dblink_name)
+                           ))
+                       )
+                union all
+                select upper(r.source_dblink_name) as dblink_name,
+                       nvl(max(i.source_host), upper(r.source_dblink_name)) as source_host,
+                       nvl(max(i.source_service), upper(r.source_dblink_name)) as source_service,
+                       0 as match_rank
+                from   mt_dcs_schema_source_rule r
+                left join mt_source_schema_inventory i
+                       on i.source_dblink_name = upper(r.source_dblink_name)
+                      and i.schema_name = upper(r.dcs_schema)
+                      and i.refresh_status = 'OK'
+                where  l_rule_count > 0
+                and    r.dcs_schema = upper(p_schema)
+                and    r.aktiv = 'J'
+                and    exists (
                            select 1
-                           from   mt_source_schema_inventory i
-                           where  i.schema_name = upper(p_schema)
-                           and    i.refresh_status = 'OK'
-                           and    i.source_dblink_name = upper(p.dblink_name)
-                       ))
-                   )
+                           from   user_db_links l
+                           where  l.db_link = upper(r.source_dblink_name)
+                           or     l.db_link like upper(r.source_dblink_name) || '.%'
+                       )
+                group by upper(r.source_dblink_name)
+            )
+            group by dblink_name
             order  by match_rank, source_host, source_service, dblink_name
         ) loop
             l_candidate_seen := true;
