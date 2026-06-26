@@ -800,9 +800,6 @@ create or replace package body mt_dcs_invalid_pkg as
             l_candidate_seen := true;
             begin
                 l_link := dbms_assert.simple_sql_name(s.dblink_name);
-                if not schema_exists_on_link(p_schema, l_link) then
-                    continue;
-                end if;
 
                 l_sql :=
                     'select object_type, status' ||
@@ -849,6 +846,7 @@ create or replace package body mt_dcs_invalid_pkg as
                 end loop;
                 close l_rc;
                 close_db_link(l_link);
+                commit;
                 if l_found then
                     exit;
                 end if;
@@ -873,6 +871,7 @@ create or replace package body mt_dcs_invalid_pkg as
                         p_source_status      => null,
                         p_result_status      => 'SOURCE_LINK_ERROR',
                         p_hinweis            => sqlerrm);
+                    commit;
             end;
         end loop;
 
